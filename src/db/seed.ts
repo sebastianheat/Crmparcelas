@@ -47,7 +47,11 @@ async function main() {
   });
   if (existing) {
     await db.transaction(async (tx) => {
+      // Contexto requerido por RLS para que el cascade borre filas del tenant.
       await tx.execute(sql`select set_config('app.allow_event_delete','on',true)`);
+      await tx.execute(
+        sql`select set_config('app.current_tenant_id', ${existing.id}, true)`,
+      );
       await tx.delete(tenants).where(eq(tenants.id, existing.id));
     });
     console.log("  · Tenant demo anterior eliminado.");
@@ -83,6 +87,12 @@ async function main() {
     tenantId: tenant.id,
     role: "super_admin",
   });
+
+  // Fijar el contexto de tenant (sesión) para que las inserciones de negocio
+  // pasen las políticas RLS aunque el rol no sea superusuario (caso Neon).
+  await db.execute(
+    sql`select set_config('app.current_tenant_id', ${tenant.id}, false)`,
+  );
 
   // 3) Clientes
   const insertedClients = await db
