@@ -117,6 +117,50 @@ export default async function ParcelPage({
                 ))}
               </Select>
             </Field>
+            <details className="rounded-lg border border-slate-200 bg-slate-50/50 p-3">
+              <summary className="cursor-pointer text-sm font-medium text-slate-700">
+                Forma de pago (opcional — alimenta la promesa)
+              </summary>
+              <div className="mt-3 space-y-3">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field label="Forma de pago de la reserva">
+                    <Select name="formaPagoReserva" defaultValue="">
+                      <option value="">—</option>
+                      <option value="transferencia">Transferencia</option>
+                      <option value="efectivo">Efectivo</option>
+                      <option value="cheque">Cheque</option>
+                    </Select>
+                  </Field>
+                  <Field label="Valor total parcela (CLP)">
+                    <Input
+                      name="valorTotalParcela"
+                      inputMode="numeric"
+                      defaultValue={parcel.price ?? ""}
+                    />
+                  </Field>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <Field label="Pie (CLP)">
+                    <Input name="pieMonto" inputMode="numeric" />
+                  </Field>
+                  <Field label="Fecha del pie">
+                    <Input name="pieFecha" type="date" />
+                  </Field>
+                  <Field label="Saldo (CLP)">
+                    <Input name="saldo" inputMode="numeric" />
+                  </Field>
+                  <Field label="N° de cuotas">
+                    <Input name="nCuotas" inputMode="numeric" placeholder="12" />
+                  </Field>
+                  <Field label="Valor cuota (CLP)">
+                    <Input name="valorCuota" inputMode="numeric" />
+                  </Field>
+                </div>
+                <Field label="Notas de pago">
+                  <Input name="notasPago" placeholder="Crédito directo, sin pie, etc." />
+                </Field>
+              </div>
+            </details>
             <Field
               label="Código de repertorio"
               hint="Gatillo de la venta exenta (solo escritura)"

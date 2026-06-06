@@ -201,7 +201,13 @@ export const clients = pgTable(
     name: text("name").notNull(),
     rut: text("rut"),
     phone: text("phone"),
+    phone2: text("phone2"),
     email: text("email"),
+    // Datos legales para formar la promesa de compraventa (M2).
+    direccion: text("direccion"),
+    profesion: text("profesion"),
+    estadoCivil: text("estado_civil"),
+    nacionalidad: text("nacionalidad").default("chilena"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

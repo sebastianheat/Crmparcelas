@@ -215,6 +215,25 @@ export async function applyParcelEvent(formData: FormData) {
     throw new Error("Selecciona el vendedor responsable de la reserva.");
   }
 
+  // Datos que alimentan la promesa (forma de pago opcional, flexible).
+  const clean = (o: Record<string, unknown>) =>
+    Object.fromEntries(Object.entries(o).filter(([, v]) => v != null && v !== ""));
+  const payload = clean({
+    formaPagoReserva: String(formData.get("formaPagoReserva") || "") || null,
+    valorTotalParcela: num(formData.get("valorTotalParcela")),
+    formaPago: (() => {
+      const fp = clean({
+        pieMonto: num(formData.get("pieMonto")),
+        pieFecha: String(formData.get("pieFecha") || "") || null,
+        nCuotas: String(formData.get("nCuotas") || "") || null,
+        valorCuota: num(formData.get("valorCuota")),
+        saldo: num(formData.get("saldo")),
+        notas: String(formData.get("notasPago") || "") || null,
+      });
+      return Object.keys(fp).length ? fp : null;
+    })(),
+  });
+
   let projectSlug = "";
   await withCurrentTenant(async (tx, { tenantId, userId }) => {
     const parcel = await tx.query.parcels.findFirst({
@@ -236,6 +255,7 @@ export async function applyParcelEvent(formData: FormData) {
         repertorioCode,
         note,
         sellerUserId: sellerId,
+        payload,
         createdByUserId: userId,
       })
       .returning();
@@ -281,19 +301,25 @@ export async function applyParcelEvent(formData: FormData) {
 // ─── Clientes ─────────────────────────────────────────────────────────────────
 
 export async function createClient(formData: FormData) {
-  await requirePermission("parcels:write");
+  await requirePermission("events:write");
   const name = String(formData.get("name") || "").trim();
   if (name.length < 2) throw new Error("Nombre inválido");
+  const str = (k: string) => String(formData.get(k) || "").trim() || null;
   await withCurrentTenant((tx, { tenantId }) =>
     tx.insert(clients).values({
       tenantId,
       name,
-      rut: String(formData.get("rut") || "") || null,
-      phone: String(formData.get("phone") || "") || null,
-      email: String(formData.get("email") || "") || null,
+      rut: str("rut"),
+      phone: str("phone"),
+      phone2: str("phone2"),
+      email: str("email"),
+      direccion: str("direccion"),
+      profesion: str("profesion"),
+      estadoCivil: str("estadoCivil"),
+      nacionalidad: str("nacionalidad") ?? "chilena",
     }),
   );
-  revalidatePath("/app/proyectos");
+  revalidatePath("/app/clientes");
 }
 
 // ─── Costos ───────────────────────────────────────────────────────────────────

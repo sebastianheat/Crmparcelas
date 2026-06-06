@@ -21,6 +21,7 @@ const NAV: { section: string; items: NavItem[] }[] = [
     items: [
       { href: "/app", label: "Dashboard", icon: "▦" },
       { href: "/app/proyectos", label: "Proyectos y Stock", icon: "▤" },
+      { href: "/app/clientes", label: "Clientes", icon: "◉" },
       { href: "/app/prefacturacion", label: "Prefacturación", icon: "₿" },
       { href: "/app/costos", label: "Costos", icon: "▸" },
       { href: "/app/equipo", label: "Equipo", icon: "◆" },
