@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { hash } from "bcryptjs";
-import { eq, max } from "drizzle-orm";
+import { desc, eq, max } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
 import { db } from "@/db/client";
@@ -14,9 +14,11 @@ import {
   invoices,
   memberships,
   moneyVouchers,
+  parcelDocuments,
   parcelEvents,
   parcels,
   projects,
+  sellerCompanies,
   users,
   type ParcelEventType,
   type Role,
@@ -24,7 +26,8 @@ import {
 import { generateLandingCopy } from "@/lib/ai/claude";
 import { getDteProvider } from "@/lib/dte";
 import { EVENT_TO_STATUS } from "@/lib/labels";
-import { generateReservaPdf } from "@/lib/pdf";
+import { generateReservaPdf, renderDocumentPdf } from "@/lib/pdf";
+import { generatePromesaText } from "@/lib/promesa";
 import { uploadBlob } from "@/lib/blob";
 import { ASSIGNABLE_ROLES } from "@/lib/roles";
 import { withCurrentTenant, requirePermission } from "@/lib/session";
@@ -512,4 +515,150 @@ export async function validateVoucher(formData: FormData) {
   });
 
   revalidatePath("/app/prefacturacion");
+}
+
+// ─── Sociedades vendedoras ────────────────────────────────────────────────────
+
+export async function createSellerCompany(formData: FormData) {
+  await requirePermission("settings:write");
+  const str = (k: string) => String(formData.get(k) || "").trim() || null;
+  const razonSocial = str("razonSocial");
+  if (!razonSocial) throw new Error("La razón social es obligatoria.");
+  await withCurrentTenant((tx, { tenantId }) =>
+    tx.insert(sellerCompanies).values({
+      tenantId,
+      razonSocial,
+      rut: str("rut"),
+      repNombre: str("repNombre"),
+      repCI: str("repCI"),
+      repNacionalidad: str("repNacionalidad") ?? "chilena",
+      repEstadoCivil: str("repEstadoCivil"),
+      repProfesion: str("repProfesion"),
+      domicilio: str("domicilio"),
+      personeriaNotaria: str("personeriaNotaria"),
+      personeriaRepertorio: str("personeriaRepertorio"),
+      personeriaFecha: str("personeriaFecha"),
+    }),
+  );
+  revalidatePath("/app/sociedades");
+}
+
+// ─── Datos legales / de adquisición del proyecto ──────────────────────────────
+
+export async function saveProjectLegal(formData: FormData) {
+  await requirePermission("projects:write");
+  const projectId = String(formData.get("projectId"));
+  const str = (k: string) => String(formData.get(k) || "").trim() || undefined;
+  const sellerCompanyId = String(formData.get("sellerCompanyId") || "") || null;
+
+  const acquisition = {
+    predioDenominacion: str("predioDenominacion"),
+    subdelegacion: str("subdelegacion"),
+    planoArchivoN: str("planoArchivoN"),
+    planoCbr: str("planoCbr"),
+    planoAnio: str("planoAnio"),
+    superficie: str("superficie"),
+    deslindes: {
+      norte: str("deslindeNorte"),
+      sur: str("deslindeSur"),
+      oriente: str("deslindeOriente"),
+      poniente: str("deslindePoniente"),
+    },
+    dominioFojas: str("dominioFojas"),
+    dominioNumero: str("dominioNumero"),
+    dominioAnio: str("dominioAnio"),
+    dominioCbr: str("dominioCbr"),
+    rolSii: str("rolSii"),
+    subdivisionNLotes: str("subdivisionNLotes"),
+    sagCertN: str("sagCertN"),
+    sagFecha: str("sagFecha"),
+    archivoCertSag: str("archivoCertSag"),
+    archivoRoles: str("archivoRoles"),
+    archivoPlano: str("archivoPlano"),
+    aguas: str("aguas"),
+  };
+
+  let slug = "";
+  await withCurrentTenant(async (tx) => {
+    const [p] = await tx
+      .update(projects)
+      .set({
+        sellerCompanyId,
+        notaria: str("notaria") ?? null,
+        acquisition,
+        updatedAt: new Date(),
+      })
+      .where(eq(projects.id, projectId))
+      .returning({ slug: projects.slug });
+    slug = p?.slug ?? "";
+  });
+  if (slug) revalidatePath(`/app/proyectos/${slug}`);
+}
+
+// ─── Generación de la promesa de compraventa (M2) ─────────────────────────────
+
+export async function generatePromesa(formData: FormData) {
+  await requirePermission("events:write");
+  const parcelId = String(formData.get("parcelId"));
+
+  let projectSlug = "";
+  await withCurrentTenant(async (tx, { tenantId, userId }) => {
+    const parcel = await tx.query.parcels.findFirst({
+      where: eq(parcels.id, parcelId),
+      with: { project: true, currentClient: true },
+    });
+    if (!parcel) throw new Error("Parcela no encontrada.");
+    if (!parcel.currentClient) {
+      throw new Error(
+        "La parcela no tiene cliente asignado. Registra una reserva con cliente primero.",
+      );
+    }
+    projectSlug = parcel.project.slug;
+
+    const company = parcel.project.sellerCompanyId
+      ? await tx.query.sellerCompanies.findFirst({
+          where: eq(sellerCompanies.id, parcel.project.sellerCompanyId),
+        })
+      : null;
+
+    // Forma de pago: del último evento con dinero (reserva/promesa).
+    const lastMoney = await tx.query.parcelEvents.findFirst({
+      where: eq(parcelEvents.parcelId, parcelId),
+      orderBy: desc(parcelEvents.createdAt),
+    });
+
+    const text = await generatePromesaText({
+      project: parcel.project,
+      company: company ?? null,
+      parcel,
+      client: parcel.currentClient,
+      notaria: parcel.project.notaria,
+      pago: (lastMoney?.payload as Record<string, unknown>) ?? null,
+    });
+
+    const pdf = await renderDocumentPdf(
+      `Promesa de compraventa — Parcela ${parcel.code}`,
+      text,
+    );
+    const url = await uploadBlob(
+      `promesas/promesa-${parcel.project.slug}-${parcel.code}.pdf`,
+      Buffer.from(pdf),
+      "application/pdf",
+    );
+
+    await tx.insert(parcelDocuments).values({
+      tenantId,
+      parcelId,
+      projectId: parcel.projectId,
+      type: "promesa",
+      title: `Promesa de compraventa — ${parcel.currentClient.name}`,
+      url,
+      status: "borrador",
+      generatedByAi: Boolean(process.env.ANTHROPIC_API_KEY),
+      createdByUserId: userId,
+    });
+  });
+
+  revalidatePath(`/app/parcelas/${parcelId}`);
+  if (projectSlug) revalidatePath(`/app/proyectos/${projectSlug}`);
 }

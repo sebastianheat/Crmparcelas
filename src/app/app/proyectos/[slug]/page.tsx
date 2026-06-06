@@ -12,16 +12,20 @@ import {
 } from "@/components/ui";
 import { PARCEL_STATUS, PROJECT_STATUS } from "@/lib/labels";
 import { formatPrice } from "@/lib/money";
-import { addParcels, generateLanding } from "@/server/actions";
-import { getProjectBySlug } from "@/server/queries";
+import { addParcels, generateLanding, saveProjectLegal } from "@/server/actions";
+import { getProjectBySlug, listSellerCompanies } from "@/server/queries";
 
 export default async function ProjectDetailPage({
   params,
 }: PageProps<"/app/proyectos/[slug]">) {
   const { slug } = await params;
-  const project = await getProjectBySlug(slug);
+  const [project, companies] = await Promise.all([
+    getProjectBySlug(slug),
+    listSellerCompanies(),
+  ]);
   if (!project) notFound();
 
+  const acq = project.acquisition ?? {};
   const st = PROJECT_STATUS[project.status];
   const ubic = [project.comuna, project.provincia, project.region]
     .filter(Boolean)
@@ -208,6 +212,127 @@ export default async function ProjectDetailPage({
               <option value="uf">UF</option>
             </Select>
             <Button type="submit">Agregar</Button>
+          </div>
+        </form>
+      </Card>
+
+      {/* Datos legales / adquisición (alimentan la promesa) */}
+      <Card>
+        <CardHeader
+          title="Datos legales y de adquisición"
+          subtitle="Cárgalos una vez: con esto se arman las promesas del proyecto (ver docs)."
+        />
+        <form action={saveProjectLegal} className="space-y-5 p-5">
+          <input type="hidden" name="projectId" value={project.id} />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Sociedad vendedora">
+              <Select
+                name="sellerCompanyId"
+                defaultValue={project.sellerCompanyId ?? ""}
+              >
+                <option value="">—</option>
+                {companies.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.razonSocial}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Notaría (firma)">
+              <Input name="notaria" defaultValue={project.notaria ?? ""} placeholder="1ª Notaría de Lo Barnechea" />
+            </Field>
+          </div>
+
+          <fieldset className="rounded-lg border border-slate-200 p-4">
+            <legend className="px-1 text-sm font-medium text-slate-700">
+              Predio madre
+            </legend>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Denominación">
+                <Input name="predioDenominacion" defaultValue={acq.predioDenominacion ?? ""} placeholder="Resto del Lote A, Hijuela Dos, Fundo La Cruz" />
+              </Field>
+              <Field label="Subdelegación">
+                <Input name="subdelegacion" defaultValue={acq.subdelegacion ?? ""} placeholder="Queri" />
+              </Field>
+              <Field label="Superficie">
+                <Input name="superficie" defaultValue={acq.superficie ?? ""} placeholder="54,50 hectáreas" />
+              </Field>
+              <Field label="Rol SII (predio madre)">
+                <Input name="rolSii" defaultValue={acq.rolSii ?? ""} placeholder="455-83" />
+              </Field>
+            </div>
+            <div className="mt-3 grid gap-4 sm:grid-cols-4">
+              <Field label="Plano archivado N°">
+                <Input name="planoArchivoN" defaultValue={acq.planoArchivoN ?? ""} placeholder="2323" />
+              </Field>
+              <Field label="CBR (plano)">
+                <Input name="planoCbr" defaultValue={acq.planoCbr ?? ""} placeholder="Talca" />
+              </Field>
+              <Field label="Año plano">
+                <Input name="planoAnio" defaultValue={acq.planoAnio ?? ""} placeholder="2020" />
+              </Field>
+              <Field label="Aguas">
+                <Input name="aguas" defaultValue={acq.aguas ?? ""} placeholder="2 acciones Canal Maule Maitenes" />
+              </Field>
+            </div>
+            <div className="mt-3 grid gap-4 sm:grid-cols-4">
+              <Field label="Dominio — Fojas">
+                <Input name="dominioFojas" defaultValue={acq.dominioFojas ?? ""} />
+              </Field>
+              <Field label="Número">
+                <Input name="dominioNumero" defaultValue={acq.dominioNumero ?? ""} />
+              </Field>
+              <Field label="Año">
+                <Input name="dominioAnio" defaultValue={acq.dominioAnio ?? ""} />
+              </Field>
+              <Field label="CBR (dominio)">
+                <Input name="dominioCbr" defaultValue={acq.dominioCbr ?? ""} placeholder="San Clemente" />
+              </Field>
+            </div>
+            <div className="mt-3 grid gap-4 sm:grid-cols-2">
+              <Field label="Deslinde Norte">
+                <Input name="deslindeNorte" defaultValue={acq.deslindes?.norte ?? ""} />
+              </Field>
+              <Field label="Deslinde Sur">
+                <Input name="deslindeSur" defaultValue={acq.deslindes?.sur ?? ""} />
+              </Field>
+              <Field label="Deslinde Oriente">
+                <Input name="deslindeOriente" defaultValue={acq.deslindes?.oriente ?? ""} />
+              </Field>
+              <Field label="Deslinde Poniente">
+                <Input name="deslindePoniente" defaultValue={acq.deslindes?.poniente ?? ""} />
+              </Field>
+            </div>
+          </fieldset>
+
+          <fieldset className="rounded-lg border border-slate-200 p-4">
+            <legend className="px-1 text-sm font-medium text-slate-700">
+              Subdivisión (SAG)
+            </legend>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <Field label="N° de lotes">
+                <Input name="subdivisionNLotes" defaultValue={acq.subdivisionNLotes ?? ""} placeholder="79" />
+              </Field>
+              <Field label="Certificado SAG N°">
+                <Input name="sagCertN" defaultValue={acq.sagCertN ?? ""} placeholder="1511/2023" />
+              </Field>
+              <Field label="Fecha SAG">
+                <Input name="sagFecha" defaultValue={acq.sagFecha ?? ""} placeholder="27-04-2023" />
+              </Field>
+              <Field label="Archivo Cert. SAG (CBR)">
+                <Input name="archivoCertSag" defaultValue={acq.archivoCertSag ?? ""} placeholder="1773" />
+              </Field>
+              <Field label="Archivo Roles (CBR)">
+                <Input name="archivoRoles" defaultValue={acq.archivoRoles ?? ""} placeholder="1774" />
+              </Field>
+              <Field label="Archivo Plano (CBR)">
+                <Input name="archivoPlano" defaultValue={acq.archivoPlano ?? ""} placeholder="1775" />
+              </Field>
+            </div>
+          </fieldset>
+
+          <div className="flex justify-end">
+            <Button type="submit">Guardar datos legales</Button>
           </div>
         </form>
       </Card>

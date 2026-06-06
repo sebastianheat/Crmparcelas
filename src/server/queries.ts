@@ -5,9 +5,11 @@ import {
   costs,
   memberships,
   moneyVouchers,
+  parcelDocuments,
   parcelEvents,
   parcels,
   projects,
+  sellerCompanies,
   users,
 } from "@/db/schema";
 import { toNumber } from "@/lib/money";
@@ -58,8 +60,20 @@ export function getParcel(id: string) {
         },
       },
     });
-    return parcel ?? null;
+    if (!parcel) return null;
+    const documents = await tx
+      .select()
+      .from(parcelDocuments)
+      .where(eq(parcelDocuments.parcelId, id))
+      .orderBy(desc(parcelDocuments.createdAt));
+    return { ...parcel, documents };
   });
+}
+
+export function listSellerCompanies() {
+  return withCurrentTenant((tx) =>
+    tx.query.sellerCompanies.findMany({ orderBy: sellerCompanies.razonSocial }),
+  );
 }
 
 export function listClients() {

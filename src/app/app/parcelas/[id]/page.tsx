@@ -14,7 +14,7 @@ import {
 import { EVENT_LABELS, PARCEL_STATUS } from "@/lib/labels";
 import { formatClp, formatPrice } from "@/lib/money";
 import { ROLE_LABELS } from "@/lib/roles";
-import { applyParcelEvent } from "@/server/actions";
+import { applyParcelEvent, generatePromesa } from "@/server/actions";
 import { getParcel, listClients, listSellers } from "@/server/queries";
 
 const EVENT_OPTIONS: { value: string; label: string }[] = [
@@ -215,6 +215,61 @@ export default async function ParcelPage({
           </div>
         </Card>
       </div>
+
+      {/* Documentos: promesa generada por IA + repositorio */}
+      <Card>
+        <CardHeader
+          title="Documentos de la parcela"
+          subtitle="Genera la promesa de compraventa con los datos del proyecto y del cliente."
+          action={
+            <form action={generatePromesa}>
+              <input type="hidden" name="parcelId" value={parcel.id} />
+              <Button type="submit" variant="secondary">
+                Generar promesa
+              </Button>
+            </form>
+          }
+        />
+        <div className="p-5">
+          {!parcel.currentClient && (
+            <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">
+              Asigna un cliente (registra una reserva con cliente) para generar la
+              promesa.
+            </p>
+          )}
+          {parcel.documents.length === 0 ? (
+            <p className="text-sm text-slate-400">Sin documentos aún.</p>
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {parcel.documents.map((d) => (
+                <li
+                  key={d.id}
+                  className="flex items-center justify-between py-2.5"
+                >
+                  <div>
+                    <a
+                      href={d.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-medium text-brand-600 hover:underline"
+                    >
+                      📄 {d.title}
+                    </a>
+                    <p className="text-xs text-slate-400">
+                      {d.type} · {d.status}
+                      {d.generatedByAi ? " · IA" : ""} ·{" "}
+                      {new Date(d.createdAt).toLocaleString("es-CL")}
+                    </p>
+                  </div>
+                  <Badge tone={d.status === "borrador" ? "amber" : "green"}>
+                    {d.status}
+                  </Badge>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </Card>
     </div>
   );
 }

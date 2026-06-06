@@ -1,6 +1,81 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { formatClp } from "./money";
 
+/**
+ * Renderiza un documento de texto largo (ej. promesa de compraventa) en un PDF
+ * A4 multipágina, con encabezado de marca y ajuste de línea por palabras.
+ */
+export async function renderDocumentPdf(
+  title: string,
+  body: string,
+): Promise<Uint8Array> {
+  const doc = await PDFDocument.create();
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const bold = await doc.embedFont(StandardFonts.HelveticaBold);
+  const pageSize: [number, number] = [595.28, 841.89]; // A4
+  const margin = 56;
+  const size = 10;
+  const lineHeight = 14;
+  const maxWidth = pageSize[0] - margin * 2;
+
+  let page = doc.addPage(pageSize);
+  let y = pageSize[1] - margin;
+
+  // Encabezado de marca en la primera página.
+  page.drawText("5000", { x: margin, y, size: 20, font: bold, color: BRAND });
+  page.drawText("by HEAT", { x: margin + 52, y: y + 3, size: 8, font, color: GRAY });
+  y -= 28;
+
+  const drawLine = (text: string, opts?: { bold?: boolean }) => {
+    if (y < margin + lineHeight) {
+      page = doc.addPage(pageSize);
+      y = pageSize[1] - margin;
+    }
+    page.drawText(text, {
+      x: margin,
+      y,
+      size,
+      font: opts?.bold ? bold : font,
+      color: DARK,
+    });
+    y -= lineHeight;
+  };
+
+  const wrap = (text: string) => {
+    const words = text.split(/\s+/);
+    let line = "";
+    for (const w of words) {
+      const test = line ? `${line} ${w}` : w;
+      if (font.widthOfTextAtSize(test, size) > maxWidth && line) {
+        drawLine(line);
+        line = w;
+      } else {
+        line = test;
+      }
+    }
+    if (line) drawLine(line);
+  };
+
+  for (const raw of body.split("\n")) {
+    const para = raw.trimEnd();
+    if (!para) {
+      y -= lineHeight * 0.6;
+      continue;
+    }
+    // Encabezados Markdown o cláusulas en mayúscula → negrita.
+    const heading = para.replace(/^#+\s*/, "");
+    const isHeading =
+      /^#{1,6}\s/.test(para) || /^[A-ZÁÉÍÓÚÑ0-9 ".:()\-]{6,}$/.test(para.slice(0, 40));
+    if (para.length <= maxWidth / 4 && isHeading) {
+      drawLine(heading, { bold: true });
+    } else {
+      wrap(heading);
+    }
+  }
+
+  return doc.save();
+}
+
 export type ReservaPdfData = {
   tenantName: string;
   folio: number;

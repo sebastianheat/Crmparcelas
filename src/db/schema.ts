@@ -215,6 +215,36 @@ export const clients = pgTable(
   (t) => [index("clients_tenant_idx").on(t.tenantId)],
 );
 
+// ─── Sociedades vendedoras (por tenant) ──────────────────────────────────────
+// Una inmobiliaria opera con varias sociedades (la promitente vendedora de cada
+// promesa/escritura). Datos para la comparecencia y personería de la promesa.
+
+export const sellerCompanies = pgTable(
+  "seller_companies",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    razonSocial: text("razon_social").notNull(),
+    rut: text("rut"),
+    repNombre: text("rep_nombre"),
+    repCI: text("rep_ci"),
+    repNacionalidad: text("rep_nacionalidad").default("chilena"),
+    repEstadoCivil: text("rep_estado_civil"),
+    repProfesion: text("rep_profesion"),
+    domicilio: text("domicilio"),
+    // Personería del representante.
+    personeriaNotaria: text("personeria_notaria"),
+    personeriaRepertorio: text("personeria_repertorio"),
+    personeriaFecha: text("personeria_fecha"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [index("seller_companies_tenant_idx").on(t.tenantId)],
+);
+
 // ─── M1 — Proyectos ───────────────────────────────────────────────────────────
 
 export const projects = pgTable(
@@ -262,6 +292,39 @@ export const projects = pgTable(
     mapKmzUrl: text("map_kmz_url"),
     // Contenido generado por IA (M6 light): copy de landing y brochure.
     landingCopy: text("landing_copy"),
+    // Sociedad vendedora por defecto del proyecto (promitente vendedora).
+    sellerCompanyId: uuid("seller_company_id").references(
+      () => sellerCompanies.id,
+      { onDelete: "set null" },
+    ),
+    // Notaría donde se firma (para promesa/escritura).
+    notaria: text("notaria"),
+    // Datos de adquisición del campo, extraídos de la carpeta legal (M1).
+    // Alimentan las cláusulas PRIMERO/SEGUNDO de la promesa (ver docs/Proceso_Legal_Parcelas.md).
+    acquisition: jsonb("acquisition")
+      .$type<{
+        predioDenominacion?: string; // "Resto del Lote A, Hijuela Dos, Fundo La Cruz"
+        subdelegacion?: string;
+        planoArchivoN?: string; // N° plano archivado
+        planoCbr?: string;
+        planoAnio?: string;
+        superficie?: string; // ej. "54,50 hectáreas"
+        deslindes?: { norte?: string; sur?: string; oriente?: string; poniente?: string };
+        dominioFojas?: string;
+        dominioNumero?: string;
+        dominioAnio?: string;
+        dominioCbr?: string;
+        rolSii?: string; // rol del predio madre
+        // Subdivisión SAG
+        subdivisionNLotes?: string;
+        sagCertN?: string; // ej. "1511/2023"
+        sagFecha?: string;
+        archivoCertSag?: string;
+        archivoRoles?: string;
+        archivoPlano?: string;
+        aguas?: string; // derechos de aprovechamiento
+      }>()
+      .default({}),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -452,6 +515,50 @@ export const invoices = pgTable(
   ],
 );
 
+/** Tipos de documento del repositorio por parcela (M2). */
+export const parcelDocTypeEnum = pgEnum("parcel_doc_type", [
+  "promesa",
+  "escritura",
+  "cesion",
+  "resciliacion",
+  "comprobante",
+  "otro",
+]);
+
+// ─── M2 — Repositorio documental por parcela ──────────────────────────────────
+
+export const parcelDocuments = pgTable(
+  "parcel_documents",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    parcelId: uuid("parcel_id")
+      .notNull()
+      .references(() => parcels.id, { onDelete: "cascade" }),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    type: parcelDocTypeEnum("type").notNull(),
+    title: text("title").notNull(),
+    url: text("url").notNull(),
+    // Estado del flujo legal: borrador → revisión abogado → firmado/notaría.
+    status: text("status").default("borrador").notNull(),
+    generatedByAi: boolean("generated_by_ai").default(false).notNull(),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    index("parcel_documents_tenant_idx").on(t.tenantId),
+    index("parcel_documents_parcel_idx").on(t.parcelId),
+  ],
+);
+
 // ─── M9 — Costos (para utilidad por proyecto) ─────────────────────────────────
 
 export const costs = pgTable(
@@ -546,16 +653,20 @@ export type MoneyVoucher = typeof moneyVouchers.$inferSelect;
 export type Invoice = typeof invoices.$inferSelect;
 export type Cost = typeof costs.$inferSelect;
 export type Client = typeof clients.$inferSelect;
+export type SellerCompany = typeof sellerCompanies.$inferSelect;
+export type ParcelDocument = typeof parcelDocuments.$inferSelect;
 
 /** Tablas de negocio sujetas a Row-Level Security por tenant. */
 export const TENANT_SCOPED_TABLES = [
   "clients",
+  "seller_companies",
   "projects",
   "parcels",
   "parcel_events",
   "money_vouchers",
   "invoices",
   "costs",
+  "parcel_documents",
 ] as const;
 
 export { sql };
