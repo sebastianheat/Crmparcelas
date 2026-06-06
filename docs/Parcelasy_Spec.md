@@ -1,0 +1,370 @@
+# Parcelasy — Especificación de Producto (PRD para Claude Code)
+
+> **Qué es esto:** documento maestro del producto. Versión ordenada, estructurada y con decisiones cerradas, lista para entregar a Claude Code.
+> **Producto:** **Parcelasy** (`parcelasy.cl`) — by HEAT. CRM/RP vertical 100% especializado en venta de parcelas en Chile.
+> **Versión:** 1.3 · **Working language:** español (Chile) · **Owner:** Sebastián / HEAT IA · **Moneda:** CLP (siempre + IVA)
+> **Anexo:** ver `Parcelasy_Repositorio_Referencia.md` — inteligencia del funnel real de Toscana (HEAT/GHL), teardown de competidores (Moby Suite, CRM Lotes) y repositorio publicitario de 7 sitios del rubro. M1/M4/M5/M7 abajo ya incorporan ese material.
+> **Estado:** decisiones de producto cerradas (ver §0.1). Pendiente solo material de referencia para detalle de build (§12).
+
+---
+
+## 0. Cómo usar este documento (instrucciones para Claude Code)
+
+- Es un PRD, no un plan de implementación cerrado. Antes de codificar, propón plan técnico y orden de fases basado en §11 (Roadmap).
+- El producto es grande. **No construyas todo de una vez.** El primer ciclo es el **MVP de Fase 1** (§11).
+- Stack y proveedores en §9 (ya decididos), abierto a tu recomendación si justificas un cambio.
+- **Multi-tenant desde el día uno** (cada inmobiliaria = tenant aislado). Sin atajos que obliguen a re-arquitecturar.
+- Toda la generación/orquestación de IA de texto y el agente WhatsApp usan la **API de Anthropic (Claude)**. Es requisito de producto.
+- Imagen/video se generan vía agregador externo (§9), orquestados por Claude.
+
+### 0.1 Decisiones cerradas (v1.1)
+
+| # | Decisión | Resolución |
+|---|---|---|
+| 1 | Precio vs Moby Suite | **Igualar, no bajar.** $1.000.000 CLP/mes + $3.000.000 CLP implementación (**siempre + IVA**). Anclar contra el costo *por proyecto* de Moby. **Fundadores (primeros 10): −30%.** Opción prepago anual + crédito a 90 días + factoring (§4.1). |
+| 2 | Corredores | **Solo mensualidad (~$50k CLP), sin comisión.** Marketplace nacional con split de comisión → recién Fase 4. |
+| 3 | WhatsApp | **Cloud API por defecto; QR como modo avanzado bajo riesgo**, con throttling y advertencia. |
+| 4 | Imagen/Video IA | **Agregador (fal.ai)** + **HeyGen** (avatar) + **Nano Banana Pro / Seedream** (imagen consistente) + **Veo/Kling/Sora** (escena) + **ElevenLabs** (voz). Orquesta Claude. |
+| 5 | Banco + SII | **Fintoc** (conciliación, Floid alt) + **proveedor DTE** (OpenFactura/LibreDTE/SimpleAPI, para factura exenta) + **código de repertorio** como gatillo de venta. |
+| 6 | Liquidaciones | **No construir nómina.** Calcular comisiones y **exportar** a Buk/Talana. |
+| 7 | Standalone vs GHL | **Funnel propio desde el MVP.** GHL = integración inbound opcional (Fase 2/3). |
+| 8 | Branding | **Parcelasy (`parcelasy.cl`), by HEAT**, marca propia separada de HEAT IA. |
+
+- Cuando una sección diga **[DECISIÓN]** es algo aún no cerrado: márcalo con TODO, no inventes.
+
+---
+
+## 1. Visión y propósito
+
+**Parcelasy** es el **primer software vertical especializado 100% en la venta de parcelas en Chile** (parcelas de agrado bajo DL 3516). No es un CRM inmobiliario genérico: es el sistema operativo completo de una empresa parceladora, integrando en una sola plataforma:
+
+1. **CRM + embudo comercial** (Meta, Instagram, Google Ads, WhatsApp).
+2. **Gestión de proyectos y stock** con trazabilidad total de cada parcela.
+3. **Pre-facturación contable** específica del rubro (el dolor #1, §2).
+4. **Documentación legal automatizada** (promesas, escrituras, resciliaciones).
+5. **Generación de contenido con IA** (imágenes, videos, landing pages, brochures).
+6. **Agente de ventas IA por WhatsApp** (Claude).
+7. **Comisiones, liquidaciones y dashboard financiero.**
+8. **Marketplace de corredores externos** (visión de largo plazo, §6-M11).
+
+**Posicionamiento:** producto de alto nivel, look moderno y profesional (referencias que el mercado chileno valora: Defontana, HubSpot, Salesforce, Buk). Mercado: ~1.500 parceladoras en Chile, meta ~10%.
+
+**Marca:** **Parcelasy** (`parcelasy.cl`), by HEAT. La capa de marketplace nacional cross-tenant (§6-M11, Fase 4) puede operar bajo submarca propia ("CRM Chile" / red de parcelas).
+
+---
+
+## 2. El problema (por qué hoy no existe)
+
+Las parceladoras tienen un desorden financiero estructural que ningún software resuelve:
+
+- En Chile **la venta de parcelas es exenta de IVA** (son terrenos). No se factura, o se factura recién en la compraventa.
+- El dinero entra antes, en la **promesa de compraventa** (anticipos del 0% al 100%), mediante un **comprobante de dinero / "prefactura"** sin soporte en sistemas contables estándar.
+- Resultado: sin factura de venta → la contabilidad no cuadra → todo "al ojo" en Excel. Hay factura de **compra** del campo, pero no de **venta** → imposible calcular utilidad real por proyecto.
+- Activos y costos altos (sobre todo marketing) con poca visibilidad de margen real.
+
+**El dolor en una frase:** dar a la parceladora **orden contable y trazabilidad total** del flujo prefactura → factura exenta, para operar liviana, tercerizar ventas de forma inteligente y saber exactamente cuánto gana.
+
+Competidor más cercano: **Moby Suite** — cobra por proyecto, enfocado en departamentos/edificios (negocio de ~4 años, no parcelas que rotan rápido) y **sin módulo de prefacturación**. ~$500.000 CLP/mes por proyecto + ~$1.5M CLP implementación por proyecto. Para una parceladora con 10–12 proyectos es inviable. *Cifras según experiencia del owner; tratar como inteligencia de mercado.*
+
+---
+
+## 3. Contexto del dominio: cómo se vende una parcela en Chile
+
+> Esta sección existe para que Claude Code entienda el negocio y modele bien los datos.
+
+### 3.1 Ciclo de vida del proyecto
+
+1. La inmobiliaria **compra un campo grande** (típicamente 10–100 ha).
+2. Ingresa un **proyecto de subdivisión al SAG**. Demora **~6 meses**.
+3. Se aprueba → **plano de subdivisión aprobado por el SAG**.
+4. El plano va al **SII**, que emite **prerroles** (certificado de pre-enrolamiento por lote).
+5. Se **inscribe en el Conservador de Bienes Raíces (CBR)** con una **minuta de deslindes** (arquitecto o abogado).
+6. Con la minuta, un abogado redacta las **escrituras/promesas** por lote → **documentos matrices** del proyecto.
+
+### 3.2 Marco legal (verificado y corregido)
+
+- **DL 3516, de 1980** (Min. Agricultura): subdivisión de predios rústicos en lotes **≥0,5 ha (5.000 m²)** → "parcelas de agrado". Fiscaliza el **SAG**. *(El audio decía 1982; correcto: 1980.)*
+- **Art. 55 LGUC (DFL 458):** regula construcción en suelo rural. Criterio operativo del owner: **~10% edificable** (≈500 m² en 5.000 m²).
+- **Formulario 2890 del SII** ("Declaración sobre Enajenación e Inscripción de Bienes Raíces"): lo presentan **notarías/conservadores** al SII en cada transferencia; existe **"F2890 en línea"** y valida rol/pre-enrolamiento. **Es el formulario que reconoce la venta ante el SII, no el F29.** *(El audio decía "formulario 29"; correcto: F2890.)*
+
+> **Implicancia técnica:** el evento "se firmó la escritura / se generó el F2890" habilita la **factura exenta** (§6-M3).
+
+### 3.3 Instrumentos comerciales/legales (estados de una parcela — historial inmutable)
+
+- **Reserva** → entra dinero (posible devolución registrada).
+- **Promesa de compraventa** → anticipo (0–100%), condiciones (plazos, obras: caminos, luz, agua, instalaciones).
+- **Resciliación** → deshace la promesa (queda en historial).
+- **Nueva promesa / nuevo cliente** → reinicia el ciclo sobre la misma parcela, conservando todo el historial.
+- **Escritura** → firma en notaría. Si es manual, tiene **código/repertorio** (ingreso obligatorio) que habilita la inscripción.
+- **Vale vista + instrucciones notariales** → fecha de retiro y depósito posterior en cuenta corriente.
+- **Inscripción en CBR** → requiere firma de escritura previa.
+- **Entrega / postventa** → entregada / no entregada / con reparo / inscrita.
+
+### 3.4 Glosario
+
+| Término | Significado |
+|---|---|
+| Parcela de agrado | Lote rústico ≥5.000 m² bajo DL 3516 |
+| SAG | Aprueba subdivisiones |
+| Prerrol / pre-enrolamiento | Certificado SII previo al rol definitivo |
+| CBR | Conservador de Bienes Raíces — inscribe dominio |
+| Minuta de deslindes | Define límites de cada lote |
+| Matriz | Documento base (escritura/promesa tipo) |
+| Comprobante de dinero / prefactura | Soporte del anticipo (no es factura) |
+| F2890 | Declaración SII de enajenación de bienes raíces |
+| Vale vista | Instrumento financiero dejado en notaría con instrucciones |
+
+---
+
+## 4. Mercado y modelo de negocio
+
+### 4.1 Planes (precios en CLP, **siempre + IVA**)
+
+| Plan | Precio (CLP, + IVA) | Incluye |
+|---|---|---|
+| **Implementación inicial** | **$3.000.000 (one-time)** | Setup, carga de proyectos, capacitación |
+| **Plan plataforma** | **$1.000.000/mes** | RP/CRM completo + Ads (panel de métricas) + 10 asientos + crédito IA base |
+| **Asiento adicional** | **$35.000/mes** | Por sobre los 10 incluidos |
+| **Performance Ads (opcional)** | **$500.000/mes** | Levantamos y gestionamos campañas + métricas |
+| **Performance Ads PRO** | **$500.000 + 10% de la inversión, tope ~$5M/mes** [confirmar tope CLP] | Gestión completa, clientes grandes |
+
+**Precio Fundadores (primeros 10 clientes): −30%.**
+- Plan plataforma: **$700.000/mes + IVA**
+- Implementación: **$2.100.000 + IVA**
+- A cambio de casos/testimonios. **El descuento aplica solo el primer año**; a partir del segundo, tarifa full.
+
+**Opción de pago anual con crédito a 90 días (caja vía factoring):**
+- El cliente **prepaga el año** → se **factura de inmediato** el total.
+- Se le otorga **crédito a 90 días**: no paga nada en el momento, paga a los 90 días.
+- Parcelasy/HEAT **factoriza la factura** y obtiene caja inmediata. Es palanca de capital de trabajo, no solo un descuento comercial.
+- *Nota financiera (validar con tu tributarista): facturar el año completo por adelantado y factorizar un servicio aún no prestado tiene implicancias de timing de IVA/renta y de revisión de la factoring; no cambia el diseño del producto, sí el flujo contable.*
+
+- **Ticket combinado objetivo:** ~$1.5M–$2.5M CLP/mes por inmobiliaria.
+- **Modelo: cobrar por empresa, NO por proyecto** (diferenciador clave vs Moby).
+- **Estrategia de precio: igualar a Moby por valor, no competir por precio.** En el pitch, anclar contra su costo por proyecto.
+- **Créditos IA:** colchón incluido que cubre consumo normal; sobre-consumo = paquetes. **El video es el costo dominante** (§7), metrear video apretado.
+
+**Implicancia de producto (billing):** el módulo de facturación debe soportar CLP + IVA; plan **mensual vs prepago anual**; flag **Fundadores (−30%)** por tenant; términos de pago **net-90**; y marcar facturas **factorizadas** para el seguimiento de caja.
+
+### 4.2 Segundo motor de ingresos — Marketplace de corredores
+
+- Portal donde **corredores externos** pagan **~$50.000 CLP/mes** por acceso a vender stock.
+- **Solo mensualidad, sin comisión** (decisión cerrada). Bajo costo → alta adopción, sin conflicto con el dueño del stock.
+- Potencial: 2.000 corredores × $50 ≈ **$100.000 USD/mes**; 150 inmobiliarias × $1.000 ≈ **$150.000 USD/mes**.
+- **Split de comisión** (modelo tipo RE/MAX nacional) → **solo Fase 4**, cuando haya liquidez de proyectos y corredores.
+
+---
+
+## 5. Arquitectura multi-tenant y roles
+
+### 5.1 Multi-tenancy
+- Cada **inmobiliaria = tenant** con aislamiento total.
+- Cada tenant configura **identidad visual** (paleta + logo + datos), que se propaga a landings, brochures y contenido generado.
+- Roles activables/desactivables por tenant.
+
+### 5.2 Roles base (permisos por defecto, configurables)
+
+| Rol | Acceso típico |
+|---|---|
+| **Super Admin** (dueño/gerente) | Todo. Define descuentos máximos. Dashboard financiero completo. |
+| **Gerente Legal** (1–2 abogados) | Carga de matrices, generación/validación de promesas y escrituras, check final, envío a notaría/cliente. |
+| **Gerente de Marketing** (+1–2) | Parcelas Contenido, landings, Ads, conexión Meta/Google/Instagram. |
+| **Jefe de Ventas** | Equipo, metas, descuentos de su nivel, comisiones de equipo. |
+| **Vendedor / Ejecutivo** | Leads, visitas, reservas/promesas, descuento auto limitado, su contenido. |
+| **Gerente de Finanzas / Contador** | Prefacturación, conciliación, costos, comisiones, dashboard. Acceso controlado a costos. |
+| **Corredor externo** | Intranet: info del proyecto, base comercial, info legal; sin finanzas. Calificado vía prueba (§6-M11). |
+
+---
+
+## 6. Módulos funcionales
+
+### M1 — Gestión de Proyectos y Stock
+- Alta de proyecto en **pocos clics**: campo, plano de subdivisión, minuta de deslindes, prerroles, fotos, ubicación.
+- **Carga vía Claude (API):** ingresar documentos (promesas, escrituras, matrices); Claude los **entiende, procesa y estructura** en el sistema.
+- Parámetros para publicidad/speech: tipo de acceso (asfaltado/estabilizado/tierra), portón automático, factibilidad (luz, agua potable, agua de regadío, iluminación de caminos), entorno (cerro, bosque nativo/esclerófilo/forestal, lago, río), cercanías (ciudades, tiempos a Santiago/gran ciudad, colegios, universidades, atracciones).
+- **Stock de parcelas** con estados §3.3 y trazabilidad inmutable.
+- **Modelo de datos de proyecto** (confirmado en campo, ver Anexo C.5): nombre + sub-marca, ubicación (comuna/provincia/región), **precio "Desde" (CLP o UF)**, **unidades totales y libres**, **badge de estado** (En Verde / Etapa N / Entrega Inmediata / Escriturable / Próximo Lanzamiento / NUEVO / 100% Vendido), galería, video, tour 360, mapa, formas de pago (contado / crédito directo / pie), atributos (acceso, factibilidad, entorno).
+- **Mapa interactivo de stock** compartible por URL (verde=disponible / rojo=vendido), montado sobre KMZ/Google Maps. Subir prioridad a Fase 1/2 (es CTA de venta, ver Anexo D.3).
+- Auto-generación al crear proyecto: **landing publicitaria + brochure (PDF) + mensaje para ejecutivos**, con paleta y logo del tenant. La landing sigue la estructura tipo del rubro (Anexo C.4).
+
+### M2 — Trazabilidad y Documentación Legal automatizada
+- Legal carga **matrices**; Ventas genera **promesas** y (idealmente) **escrituras** automáticas.
+- Flujo: documento generado → **check final de abogado** → envío a cliente y notaría.
+- Firma manual en notaría → ingreso **obligatorio** del **código/repertorio** → habilita inscripción CBR.
+- **Firma electrónica** (GoFirmex o equivalente) para promesas/escrituras enviadas al cliente (lo usa Moby vía GoFirmex; ver Anexo B.1).
+- Registro de **vales vista + instrucciones notariales** (fecha de retiro, depósito posterior).
+- **Historial inmutable por parcela** (reserva → devolución → promesa → resciliación → nueva promesa → escritura → inscripción → entrega/reparo). Nunca se borra.
+- Repositorio documental por parcela, todo dentro de la plataforma.
+
+### M3 — Pre-facturación, conciliación e integración SII ⭐ (diferenciador clave)
+- Cada anticipo de promesa → **comprobante de dinero / prefactura** trazable.
+- Contabilidad interna de comprobantes; en la compraventa, **transformar en factura exenta** (opcional: puede quedar como registro interno).
+- **Factura exenta (SII real):** integrar **proveedor DTE chileno** — **OpenFactura/Haulmer**, **LibreDTE** o **SimpleAPI** — para emitir la factura exenta electrónica cuando el usuario lo decida.
+- **Gatillo del evento de venta:** el **código de repertorio** obligatorio (M2). No existe API pública de terceros para el F2890 (app exclusiva de notarios/CBR); leer Mi SII del tenant con sus credenciales = nice-to-have, no bloqueante.
+- **Conciliación bancaria:** **Fintoc** (alternativa **Floid**) — conecta la cuenta del tenant vía API, extrae y normaliza movimientos y hace matching por monto/fecha/referencia; cada movimiento trae ID único (no duplica al reimportar). **MVP: import semanal.** Resuelve seguimiento de depósito de vale vista e ingresos por promesa.
+- **Dashboard de prefacturación:** entrado vs prometido vs escriturado, por proyecto.
+- **Cobranza / crédito directo:** recordatorios de pago automáticos (antes/después de vencimiento) y portal de cliente con historial de pagos. El crédito directo y el "sin pie" son ganchos centrales del rubro (Anexo C.5/D.3); CRM Lotes lo prioriza.
+
+### M4 — CRM y Embudo Comercial
+> Diseñado para **replicar nativo** el embudo real de Toscana (Anexo A). **Funnel 100% propio desde el MVP**; GHL = integración inbound opcional (Fase 2/3), nunca como base.
+- Captura de leads desde **Meta (lead forms)**, **Instagram**, **Google Ads**, con **atribución a nivel de creativo** (no solo campaña/fuente: cada lead guarda qué pieza —Video/Imagen/Gráfica X— lo trajo).
+- **Doble pipeline configurable** de fábrica:
+  - **Ventas (13 etapas):** Entrada → No contesta I/II/III → Hablando con la IA → En conversación → Re-Insistencia → Reunión → Reservas → Visita Agendada → Visita Cancelada → Visita Concretada → Promesando. Etapa dedicada al **agente IA**, separada del humano.
+  - **CallCenter (6 etapas):** Lead Asignados → reinsistir → envió Info → Agendado → No Interesado → Descartado.
+- **Secuencia de re-insistencia pre-armada** (el corazón operativo: ahí está el grueso del volumen).
+- Vistas de pipeline **filtrables por proyecto/ubicación** (pestañas tipo CASABLANCA, CURICÓ, CURACAVÍ…).
+- **4 preguntas de calificación nativas** en el formulario de captura: ¿bancarizado?, plazo de compra, ahorro disponible, destino (vivir/invertir) → alimentan scoring, ruteo y speech del agente.
+- Creación automática de oportunidad al entrar el lead + **tagging por canal** (lead, lead-redes, lead-chat, lead-whatsapp) + asignación de propietario.
+- Gestión de **visitas a terreno** (agenda desde web o WhatsApp). Planificador de anuncios integrado.
+- **Workflows de fábrica** (Anexo A.5): INICIO/bienvenida, creación de oportunidad, gestión de pipeline, recordatorios de calendario, y **Calidad de Lead vía CAPI** (feedback a Meta).
+
+### M5 — Agente IA de ventas por WhatsApp
+- Responde y agenda visitas. **Usa Claude (API Anthropic).**
+- **Cloud API por defecto**; **QR como modo avanzado** con throttling, intervalos aleatorios, rotación de mensaje vía Claude, warming y **advertencia de riesgo** (§8).
+- Usa el **speech de 5 pasos** (§7.3) y el contexto del proyecto (M1).
+- Envío a base de datos (campañas salientes) — ver §8.
+
+### M6 — Parcelas Contenido (generación con IA)
+> Submódulo de Parcelasy → sección "Parcelas Contenido". Detalle en §7.
+- **~200 imágenes** + **~100 videos** prediseñados tipo inmobiliario, parametrizables.
+- El usuario sube 4–5 imágenes + prompt → **Claude reconoce** qué template calza y rutea la generación a medida (precio, ubicación, fondo, info), en la línea corporativa del tenant.
+- **Avatares personalizados:** el tenant sube varias fotos (ángulos, ropa corporativa) de 1–2 vendedores/dueños → avatar propio consistente en videos y fotos (vía HeyGen). Nada de avatar genérico compartido.
+- Auto-genera **landings + brochures + banners de oferta** desde panel admin simple.
+
+### M7 — Ads (panel de métricas)
+- Incluido en el plan. Concepto tipo Bambú Ads: integra **CAPI, Pixel de Meta, Google Tag Manager**; entrega data accionable.
+- **KPIs del dashboard** (replicar el tablero real de Toscana, Anexo A.6): **Leads Totales**, **Costo Promedio por lead (CPL)** —métrica estrella del parcelero— con variación % vs período, **Leads Ayer/Hoy**, **Inversión Ayer/Hoy/Total**, **Prospectos por día** (barras) e **Inversión por día** (línea).
+- Objetivo: **eliminar la agencia**; la inmobiliaria opera sola subiendo el contenido.
+- Upsell: **Performance Ads** (operamos campañas).
+
+### M8 — Comisiones (NO nómina)
+- **No se construye nómina/liquidaciones de sueldo.** Solo **cálculo de comisiones**, con **exportación a Buk/Talana** (CSV/API). Mantiene la empresa desacoplada de lo laboral.
+- Estructura **100% configurable** por inmobiliaria, con plantillas (2%/3%/5%/10% o monto fijo por parcela; bonos por meta, ej. 10 parcelas → $500.000).
+- Comisión configurable **por hito**: promesa firmada / escritura / liberación-depósito (preferencia: pagar por **dinero ingresado**) / crédito directo vs contado.
+- Parámetros de **descuento por rol** (vendedor auto / jefe / Super Admin).
+- Cálculo contra ingresos reales (vía conciliación, M3).
+
+### M9 — Dashboard financiero
+- Vista simple para Super Admin: **costos / ventas / utilidades**, idealmente por proyecto (resuelve §2).
+- Finanzas con acceso controlado para cargar costos.
+
+### M10 — Capacitación de ventas
+- Panel con el **proceso de venta de 5 pasos** (§7.3) y material reutilizable.
+
+### M11 — Portal de Corredores (marketplace) — visión de escala
+- **Capa A (dentro del tenant):** la inmobiliaria habilita corredores para vender *su* stock; comisiones del corredor según config del tenant.
+- **Capa B (marketplace nacional, Fase 4):** cross-tenant, "el RE/MAX de parcelas".
+- **Calificación obligatoria:** entrevista/filtro + **prueba de conocimiento** con puntaje → condición "corredor de parcelas" + acceso a intranet (info de proyecto, base comercial, info legal).
+- **Monetización: solo mensualidad ~$50.000 CLP. Sin comisión.** Split de comisión solo en Capa B / Fase 4.
+
+---
+
+## 7. Generación de contenido con IA — detalle
+
+### 7.1 Banco de plantillas
+- **~200 imágenes** + **~100 videos** en la línea homogénea del rubro parcelas en Chile.
+- Parámetros de escena ej.: *campo, plano con manzanas, cerro, atardecer, persona (vestido rojo / rubia / morena / chilena / argentina), etc.* → muchos parámetros, pero **muy automatizado**.
+
+### 7.2 Construcción del banco (research dirigido)
+- Repositorio de referencia con las ~50 parceladoras grandes de Chile (webs, Instagram, anuncios, fotos/videos).
+- Detectar patrones que funcionan (engagement, ofertas usadas) y replicar **el estilo** de forma masiva pero simple, generando contenido **original** con IA.
+- *Nota: análisis competitivo de material público es válido; no replicar/redistribuir activos con copyright ni extraer código/datos propietarios.*
+
+### 7.3 Speech de ventas — 5 pasos (alimenta agente IA y capacitación)
+1. **Presentación del proyecto** (nombre, ubicación general).
+2. **Ubicación** (distancias a ciudad cercana, ciudades grandes, Santiago/Concepción).
+3. **Cercanías** (colegios, universidades, lagos, atracciones).
+4. **Condiciones** (acceso asfaltado, portón, luz, agua potable/regadío, entorno).
+5. **Coordinar visita + hook de urgencia** según stock (pocas unidades, primeras al mejor precio, oferta de fin de semana, evento, descuento, reserva gratis, sin costos operacionales ahora).
+
+> Benchmark de comportamiento: agente de Toscana (HEAT + GHL).
+
+---
+
+## 8. Nota técnica: envío masivo por WhatsApp (QR vs API, riesgo de bloqueo)
+
+**QR (WhatsApp Web no oficial):**
+- El envío automatizado por QR **viola los ToS de WhatsApp**; riesgo de baneo existe **aunque rotes** (detecta velocidad, mensajes idénticos, ratio a no-contactos, reportes).
+- Mitigaciones que **reducen pero no eliminan** el riesgo: warming gradual, intervalos **aleatorizados** (no exactos cada 5 min), variación del mensaje vía Claude, horario humano (9–18h), no enviar a quien nunca te escribió, bajo ratio a contactos nuevos. Varios números reparten el riesgo pero multiplican los puntos de baneo.
+
+**Camino correcto (default):**
+- **WhatsApp Cloud API** con **plantillas aprobadas** por Meta para saliente. Estable, pero el frío masivo a base sin consentimiento igual infringe política de Meta y baja la *quality rating* (reduce límites de envío).
+- Mejor práctica: saliente enfocado en **leads que ya interactuaron** (opt-in vía lead form / clic "Enviar mensaje"); el frío masivo déjalo a Ads, no a WhatsApp.
+
+**Producto:** soportar ambas conexiones; QR con límites de seguridad + advertencia clara de baneo; Claude varía el copy (ayuda, no garantiza evadir detección).
+
+---
+
+## 9. Stack técnico e integraciones (decidido)
+
+- **Frontend:** Next.js + Tailwind, look moderno (Defontana/HubSpot). Multi-tenant con theming por tenant.
+- **Backend:** Node/TypeScript (o tu recomendación justificada); multi-tenant aislado.
+- **DB:** Postgres (relacional fuerte; tablas append-only/event-sourcing para el historial inmutable de parcela).
+- **IA texto + orquestación + agente WhatsApp:** **API Anthropic (Claude).**
+- **Imagen/Video:** **agregador fal.ai** (una API, pay-per-use, sin lock-in; Atlas Cloud como alternativa). Ruteo por tarea:
+  - Avatar talking-head de vendedor real → **HeyGen** (avatar desde 5–10 fotos, API, español, integra Veo/Sora para B-roll).
+  - Imagen con persona/avatar consistente → **Nano Banana Pro** o **Seedream 5** (multi-referencia).
+  - Lote masivo de templates → **Seedream Lite** (barato/rápido).
+  - Escena cinematográfica (campo, dron, atardecer) → **Veo 3.1 / Kling / Sora 2** vía agregador.
+  - Voz/doblaje → **ElevenLabs.**
+- **WhatsApp:** Cloud API + opción QR.
+- **Canales:** Meta (lead forms, CAPI, Pixel), Instagram, Google Ads, Google Tag Manager.
+- **Pagos SaaS:** Stripe (ya en uso por HEAT).
+- **Bancos:** **Fintoc** (alt **Floid**) — conciliación vía open banking.
+- **SII / factura exenta:** proveedor **DTE** (OpenFactura/Haulmer, LibreDTE o SimpleAPI). Gatillo de venta = código de repertorio.
+- **Nómina:** sin construcción; **export a Buk/Talana.**
+- **Mapas/visual:** Google Maps con fotomontaje del plano vía **KMZ** (MVP). 360° (Nube360/vista 360) en fase posterior.
+- **Deploy:** alineado a infra HEAT (Netlify/Vercel) — confirmar.
+
+---
+
+## 10. Identidad visual y UX
+- Look **moderno, limpio, profesional**, nivel Defontana / HubSpot / Salesforce / Buk.
+- Theming por tenant (paleta + logo en todo el contenido generado).
+- Dashboard financiero simple: costos, ventas, utilidades de un vistazo.
+- Onboarding de proyecto en pocos clics.
+
+---
+
+## 11. Roadmap por fases
+
+**Fase 1 — MVP (núcleo de orden, lo que vende):**
+- Multi-tenant + roles base (§5).
+- M1 Proyectos y Stock + estados/trazabilidad (§3.3).
+- M3 Pre-facturación (comprobantes → factura exenta) — versión manual/semanal. **El diferenciador.**
+- M9 Dashboard financiero básico.
+- Landing + brochure auto-generados por proyecto.
+
+**Fase 2 — Comercial:**
+- M4 CRM/embudo propio (Meta/Google/Instagram, visitas).
+- M5 Agente IA WhatsApp (Cloud API).
+- M8 Comisiones por hito + export Buk/Talana.
+
+**Fase 3 — Contenido + Ads:**
+- M6 Parcelas Contenido (banco de plantillas, avatares HeyGen).
+- M7 Ads (panel de métricas) + Performance Ads.
+- M2 Documentación legal automatizada completa (escrituras).
+- Integración GHL inbound opcional.
+
+**Fase 4 — Escala:**
+- M11 Marketplace de corredores (Capa B nacional, split de comisión).
+- Conciliación bancaria automática + SII más profundo.
+- Visual 360°.
+
+---
+
+## 12. Material de referencia — estado
+
+> Decisiones de producto cerradas (§0.1). Estado del material de campo:
+
+**Ya levantado (ver `Parcelasy_Repositorio_Referencia.md`):**
+- ✅ Teardown de **Moby Suite** y **CRM Lotes** (Anexo B).
+- ✅ **Embudo de Toscana** (HEAT/GHL) extraído de capturas → ya incorporado en M4/M5/M7 (Anexo A).
+- ✅ **Repositorio publicitario** de 7 sitios (megaparcelas, surprofundo, ichicureo, hacienda, itoscana, compratuparcela) → patrones, headlines, ofertas, estructura y modelo de datos de proyecto (Anexo C).
+- ✅ Hallazgo estratégico: `compratuparcela.cl` ya construye la Capa B (marketplace) → vigilar (Anexo D.1).
+
+**Aún pendiente de ti:**
+- **3–5 de tus mejores landings/brochures** propios (de los ~50 que tienes) → afinar plantillas finas de M6 más allá de los patrones del Anexo C.
+- Tu **estructura de comisiones tipo** real (un par de casos) → parametrizar M8.
+- **Listado ampliado de parceladoras** (hacia las ~50) si quieres engrosar el repositorio §7.2 / Anexo C.
+- **Tope en CLP del Performance Ads PRO** (hoy ~$5M) → confirmar. Resto de precios cerrado.

@@ -1,0 +1,158 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import {
+  Badge,
+  Button,
+  Card,
+  CardHeader,
+  Field,
+  Input,
+  LinkButton,
+  Select,
+  Textarea,
+} from "@/components/ui";
+import { EVENT_LABELS, PARCEL_STATUS } from "@/lib/labels";
+import { formatClp, formatPrice } from "@/lib/money";
+import { applyParcelEvent } from "@/server/actions";
+import { getParcel, listClients } from "@/server/queries";
+
+const EVENT_OPTIONS: { value: string; label: string }[] = [
+  { value: "reserva", label: "Reserva (ingresa dinero)" },
+  { value: "devolucion_reserva", label: "Devolución de reserva" },
+  { value: "promesa", label: "Promesa de compraventa (anticipo)" },
+  { value: "resciliacion", label: "Resciliación" },
+  { value: "nueva_promesa", label: "Nueva promesa" },
+  { value: "escritura", label: "Escritura (código de repertorio)" },
+  { value: "inscripcion_cbr", label: "Inscripción CBR" },
+  { value: "entrega", label: "Entrega" },
+  { value: "reparo", label: "Reparo" },
+  { value: "vale_vista", label: "Vale vista" },
+  { value: "bloqueo", label: "Bloqueo" },
+  { value: "desbloqueo", label: "Desbloqueo" },
+];
+
+export default async function ParcelPage({
+  params,
+}: PageProps<"/app/parcelas/[id]">) {
+  const { id } = await params;
+  const [parcel, clients] = await Promise.all([getParcel(id), listClients()]);
+  if (!parcel) notFound();
+
+  const ps = PARCEL_STATUS[parcel.status];
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-3">
+            <h1 className="text-xl font-semibold text-slate-900">
+              Parcela {parcel.code}
+            </h1>
+            <Badge tone={ps?.tone}>{ps?.label ?? parcel.status}</Badge>
+          </div>
+          <p className="mt-1 text-sm text-slate-500">
+            <Link
+              href={`/app/proyectos/${parcel.project.slug}`}
+              className="hover:text-brand-600"
+            >
+              {parcel.project.name}
+            </Link>{" "}
+            · {parcel.areaM2 ? `${parcel.areaM2} m²` : "—"} ·{" "}
+            {formatPrice(parcel.price, parcel.priceUnit)}
+          </p>
+        </div>
+        <LinkButton href={`/app/proyectos/${parcel.project.slug}`} variant="ghost">
+          ← Proyecto
+        </LinkButton>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Aplicar evento */}
+        <Card>
+          <CardHeader
+            title="Registrar movimiento"
+            subtitle="Cada acción queda en el historial inmutable de la parcela."
+          />
+          <form action={applyParcelEvent} className="space-y-4 p-5">
+            <input type="hidden" name="parcelId" value={parcel.id} />
+            <Field label="Tipo de movimiento">
+              <Select name="type" defaultValue="reserva">
+                {EVENT_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Monto ingresado (CLP)" hint="Genera comprobante de dinero">
+                <Input name="amountClp" inputMode="numeric" placeholder="300000" />
+              </Field>
+              <Field label="Cliente">
+                <Select name="clientId" defaultValue="">
+                  <option value="">—</option>
+                  {clients.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            </div>
+            <Field
+              label="Código de repertorio"
+              hint="Gatillo de la venta exenta (solo escritura)"
+            >
+              <Input name="repertorioCode" placeholder="Ej: 1234-2026" />
+            </Field>
+            <Field label="Nota">
+              <Textarea name="note" rows={2} placeholder="Detalle del movimiento…" />
+            </Field>
+            <div className="flex justify-end">
+              <Button type="submit">Registrar movimiento</Button>
+            </div>
+          </form>
+        </Card>
+
+        {/* Historial */}
+        <Card>
+          <CardHeader
+            title="Historial"
+            subtitle="Append-only: nunca se borra ni se edita."
+          />
+          <div className="p-5">
+            {parcel.events.length === 0 ? (
+              <p className="text-sm text-slate-400">Sin movimientos aún.</p>
+            ) : (
+              <ol className="relative space-y-4 border-l border-slate-200 pl-5">
+                {parcel.events.map((ev) => (
+                  <li key={ev.id} className="relative">
+                    <span className="absolute -left-[1.42rem] top-1.5 h-2.5 w-2.5 rounded-full bg-brand-500 ring-2 ring-white" />
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-medium text-slate-900">
+                        {EVENT_LABELS[ev.type]}
+                      </p>
+                      {ev.amountClp && (
+                        <span className="text-sm font-medium text-emerald-700">
+                          {formatClp(ev.amountClp)}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-400">
+                      {new Date(ev.createdAt).toLocaleString("es-CL")}
+                      {ev.client?.name ? ` · ${ev.client.name}` : ""}
+                      {ev.repertorioCode ? ` · Rep. ${ev.repertorioCode}` : ""}
+                    </p>
+                    {ev.note && (
+                      <p className="mt-1 text-sm text-slate-600">{ev.note}</p>
+                    )}
+                  </li>
+                ))}
+              </ol>
+            )}
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
+}
