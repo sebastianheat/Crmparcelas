@@ -179,6 +179,38 @@ Estructura observada (matriz San Alberto + ejemplo "Lote 14 Álvaro Salas"). Las
    deslindes por lote, N° de lote del plano.
 6. **Gatillo de venta exenta (M3):** escritura + repertorio + inscripción CBR.
 
+## 7.bis Checklist de antecedentes legales (estudio de títulos)
+
+Documentos que conforman el **estudio de títulos** de un proyecto (a exigir/almacenar
+en el módulo de Documentos de adquisición; útil como checklist por proyecto):
+- Sociedad vendedora: vigencia, extracto Diario Oficial, RUT, **vigencia de poderes**
+  de los representantes.
+- **Escritura de compraventa** del campo + escrituras de **rectificación** (Repertorio,
+  fecha, notaría).
+- Cadena de dominio: posesión efectiva, inscripción especial de herencia, transferencias
+  parciales (todas con Fs/N°/Año), inscripción de dominio vigente.
+- **Certificados de deuda TGR** por cada Rol (ej. 455-82, 455-83).
+- **Certificados SAG** de subdivisión (ej. N°08/2020 → Resto Lote A + Lote A3; N°1511/2023)
+  con sus **archivos CBR** (certificado SAG, asignación de roles, plano).
+- **Servidumbres** (tránsito/ocupación/eléctricas: Colbún, Alto Jahuel) con Fs/N°/Año.
+- **Certificados de hipotecas, gravámenes, prohibiciones e interdicciones** de cada
+  inscripción relevante.
+- **Derechos de aprovechamiento de aguas**: inscripciones + certificado de bocatoma y
+  de la Comunidad de Aguas (sin deuda).
+
+## 7.ter Instrucciones notariales y vale vista (mecanismo de pago seguro)
+
+- El comprador deja **uno o más vales vista endosables** en custodia del Notario
+  (tantos como inversionistas/acreedores: típicamente Banco Security + vendedor + corredor).
+- Se **liberan al beneficiario** sólo cuando se acredita, en forma conjunta: (1) la
+  **inscripción del inmueble a nombre del comprador** en el CBR; y (2) que esa inscripción
+  está **libre de hipotecas, gravámenes y prohibiciones** (salvo las nuevas pactadas).
+  Se acredita con copia de inscripción de dominio + certificado de hipotecas/gravámenes.
+- **Plazo** (≈120–150 días): si no se firma/inscribe, los tomadores retiran sus vales
+  vista, suscribiendo la **resciliación** de la promesa.
+- El CRM debe registrar por parcela: vale vista (N°, banco, monto, tomador, beneficiario
+  final), instrucción asociada y fecha de liberación/retiro (evento `vale_vista`).
+
 ## 8. Estado de la lectura (Drive)
 
 Leídos íntegros (texto): compraventa+hipoteca Metacon→Vargas (Colina), cesión de
