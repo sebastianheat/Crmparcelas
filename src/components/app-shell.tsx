@@ -55,7 +55,7 @@ export function AppShell({
       <aside className="hidden w-64 shrink-0 flex-col border-r border-slate-200 bg-white md:flex">
         <div className="flex h-16 items-center gap-2 border-b border-slate-100 px-5">
           <span className="text-lg font-bold tracking-tight text-brand-600">
-            Parcelasy
+            5000
           </span>
           <span className="text-xs text-slate-400">by HEAT</span>
         </div>

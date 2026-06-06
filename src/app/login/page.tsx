@@ -13,7 +13,7 @@ export default async function LoginPage() {
         <div className="mb-6 text-center">
           <div className="mb-2 inline-flex items-center gap-2">
             <span className="text-2xl font-bold tracking-tight text-brand-600">
-              Parcelasy
+              5000
             </span>
           </div>
           <p className="text-sm text-slate-500">
@@ -24,7 +24,7 @@ export default async function LoginPage() {
           <LoginForm />
         </Card>
         <p className="mt-4 text-center text-xs text-slate-400">
-          Demo: admin@parcelasy.cl · Parcelasy2026
+          Demo: admin@5000.cl · Cincomil2026
         </p>
       </div>
     </div>

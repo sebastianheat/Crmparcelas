@@ -1,13 +1,13 @@
-# Parcelasy — Repositorio de Referencia e Inteligencia Competitiva
+# 5000 — Repositorio de Referencia e Inteligencia Competitiva
 
-> **Anexo del spec principal (Parcelasy_Spec).** Material de campo levantado de la operación real de **Inmobiliaria Toscana** (HEAT/GHL, 5 capturas) y de 7 sitios del rubro. Sirve a Claude Code para replicar el funnel de forma nativa y al módulo de contenido (M6) como base de plantillas.
+> **Anexo del spec principal (5000_Spec).** Material de campo levantado de la operación real de **Inmobiliaria Toscana** (HEAT/GHL, 5 capturas) y de 7 sitios del rubro. Sirve a Claude Code para replicar el funnel de forma nativa y al módulo de contenido (M6) como base de plantillas.
 > **Fecha:** jun 2026 · **Owner:** Sebastián / HEAT IA
 
 ---
 
 ## A. Inteligencia del funnel real (HEAT/GHL — Toscana)
 
-> Esto es oro: es el embudo que hoy funciona en producción. Parcelasy debe replicarlo nativo (sin depender de GHL).
+> Esto es oro: es el embudo que hoy funciona en producción. 5000 debe replicarlo nativo (sin depender de GHL).
 
 ### A.1 Pipeline principal "Ventas" — 13 etapas
 
@@ -30,14 +30,14 @@ Orden, con volumen real al momento de la captura (5.928 leads totales):
 Observaciones de diseño:
 - El **agente IA tiene etapa propia** ("Hablando con la IA"), separada de "En conversación" (humano).
 - La máquina de re-enganche es explícita: **No contesta I → II → III → Re-Insistencia**. Aquí se concentra el grueso del volumen — es el corazón operativo.
-- El pipeline se **segmenta por proyecto/ubicación** vía pestañas: CASABLANCA, CURICO, CURACAVI, + "5 Más". Parcelasy debe permitir vistas de pipeline filtradas por proyecto.
+- El pipeline se **segmenta por proyecto/ubicación** vía pestañas: CASABLANCA, CURICO, CURACAVI, + "5 Más". 5000 debe permitir vistas de pipeline filtradas por proyecto.
 - Cada tarjeta lleva **Valor del cliente** (el precio de la parcela: CL$114.000.000, CL$54.990.000, CL$26.990.000, CL$24.990.000 según proyecto) y **Fuente** (Facebook / Redes Sociales) + **tags de proyecto/campaña** (LINDEROS, CURACAVI, CURICO, CODEGUA, FILO CYBER…).
 
 ### A.2 Pipeline secundario "CallCenter" — 6 etapas
 
 354 leads. Etapas: **Lead Asignados (221) → reinsistir (37) → envió Info (18) → Agendado (16) → No Interesado (16) → Descartado (46)**.
 
-- Atribución a **nivel de creativo**: las fuentes son del tipo *Video Codegua, Video Marchigüe, Gráfica BLACK 3, Imagen Curicó, Video BLACK 1, Imagen Codegua, Video 1, Campañas Optify, Importados Anet*. → Cada lead sabe **qué pieza creativa** lo trajo. Parcelasy debe capturar `creativo` además de `campaña` y `fuente`.
+- Atribución a **nivel de creativo**: las fuentes son del tipo *Video Codegua, Video Marchigüe, Gráfica BLACK 3, Imagen Curicó, Video BLACK 1, Imagen Codegua, Video 1, Campañas Optify, Importados Anet*. → Cada lead sabe **qué pieza creativa** lo trajo. 5000 debe capturar `creativo` además de `campaña` y `fuente`.
 
 ### A.3 Modelo de calificación del lead (MetaForm)
 
@@ -49,7 +49,7 @@ Campos que llegan desde el formulario de Meta (vistos en la conversación real):
 - **Buscas tu propiedad para:** Vivir / Invertir.
 - Estándar: nombre, apellido, teléfono, email, whatsapp_number, source_url, inbox_url.
 
-→ Estos 4 campos de calificación deben ser **nativos del formulario de captura de Parcelasy** y alimentar el scoring/ruteo del lead y el speech del agente IA.
+→ Estos 4 campos de calificación deben ser **nativos del formulario de captura de 5000** y alimentar el scoring/ruteo del lead y el speech del agente IA.
 
 ### A.4 Modelo de contacto (panel de detalle)
 
@@ -62,15 +62,15 @@ Al entrar un lead se **crea automáticamente la oportunidad** en "Ventas - Entra
 
 Organizadas por ciclo de vida: **01-INICIO, 02-OPORTUNIDAD, 03-PIPELINE, 04-JSARMIENTO, 05-CALENDARIO**, + **Automatización Avanzada**, **Calidad de LEAD | CAPI** (devuelve calidad de lead a Meta vía Conversions API), **Clientes Potenciales | MetaForm – Landing** (entradas).
 
-→ Parcelasy debe traer estos **workflows pre-armados de fábrica** (plantillas), no que cada inmobiliaria los construya: bienvenida/INICIO, creación de oportunidad, gestión de pipeline, recordatorios de calendario, y feedback de calidad de lead a Meta (CAPI).
+→ 5000 debe traer estos **workflows pre-armados de fábrica** (plantillas), no que cada inmobiliaria los construya: bienvenida/INICIO, creación de oportunidad, gestión de pipeline, recordatorios de calendario, y feedback de calidad de lead a Meta (CAPI).
 
 ### A.6 Dashboard de prospección (KPIs reales)
 
 Tablero "Prospección" con: **Leads Totales** (1.37K/30d), **Costo Promedio por lead** (~CL$6.530, con variación % vs período anterior), **Leads Ayer / Hoy**, **Inversión Ayer / Hoy / Total** (CL$7.21M/30d), **Prospectos por día** (barras) e **Inversión por día** (línea).
 
-→ Este es el set exacto de KPIs del módulo **M7 (Ads)** de Parcelasy. El **CPL** es la métrica estrella del parcelero.
+→ Este es el set exacto de KPIs del módulo **M7 (Ads)** de 5000. El **CPL** es la métrica estrella del parcelero.
 
-### A.7 Qué debe replicar Parcelasy nativo
+### A.7 Qué debe replicar 5000 nativo
 
 - Doble pipeline (Ventas + CallCenter) con etapas configurables y la **secuencia de re-insistencia** pre-armada.
 - Etapa dedicada al **agente IA** dentro del pipeline.
@@ -96,7 +96,7 @@ Módulos (cobro por "módulos satélite"):
 - **Integraciones:** Fintoc, Transbank, WhatsApp, TikTok, HubSpot, Facebook, Instagram, **Defontana**, Softland, **GoFirmex (firma electrónica)**, SAP, Acepta, portales (TocToc, Zoom Inmobiliario, GoPlaceIt).
 
 **Lo que confirma para nosotros:**
-- Ya validan **Fintoc** (conciliación/recaudación) y **firma electrónica (GoFirmex)** → ambos van en Parcelasy (M2/M3).
+- Ya validan **Fintoc** (conciliación/recaudación) y **firma electrónica (GoFirmex)** → ambos van en 5000 (M2/M3).
 - Tienen Plano Dinámico y Asistente IA → no es diferenciador inventarlos, sí ejecutarlos mejor para parcelas.
 
 **Gaps que explotamos:** sin **prefacturación de venta exenta** (comprobante de dinero → factura exenta); orientado a altura, no a la rotación rápida de parcelas; **cobro por proyecto** (inviable con 10-12 proyectos); sin generación de contenido IA; sin agente IA de ventas saliente al estilo parcelero; sin trazabilidad legal específica (SAG, promesa/resciliación, F2890).
@@ -115,7 +115,7 @@ Posicionamiento contra: "Excel interminable", "info desactualizada", "cotizacion
 
 ### B.3 Comparativa rápida (qué nos diferencia)
 
-| Capacidad | Moby Suite | CRM Lotes | **Parcelasy** |
+| Capacidad | Moby Suite | CRM Lotes | **5000** |
 |---|---|---|---|
 | Nicho | Edificios/deptos | Lotes (México) | **Parcelas Chile (DL3516)** |
 | Cobro | Por proyecto | Por empresa | **Por empresa** |
@@ -161,7 +161,7 @@ Análisis de 4 inmobiliarias (megaparcelas/Grupo Raíz, surprofundo, ichicureo, 
 Fórmula casi universal: **[Geo-prefijo] + de + [Lugar]**. Prefijos observados:
 *Valle de…, Viñas de…, Bosques de…, Lomas de…, Altos de…, Brisas de…, Vista…, Remanso…, Ribera…, Entre Valles…, Hacienda…, Raíces…, Oasis…, Portal de…*
 
-→ El generador de proyectos de Parcelasy puede sugerir nombres con esta gramática.
+→ El generador de proyectos de 5000 puede sugerir nombres con esta gramática.
 
 ### C.4 Estructura de sitio tipo (para el auto-generador de landings, M6)
 
@@ -200,4 +200,4 @@ Facebook/Instagram (Pixel + CAPI), Google (GTM, Ads), TikTok, YouTube. WhatsApp 
 - El **mapa interactivo de stock compartible por URL** (de CRM Lotes) sube de prioridad: ponerlo ya en Fase 1/2, no en la 4. Es barato, vistoso y es CTA de venta.
 - **Crédito directo + cobranza** (recordatorios de pago) es un módulo que CRM Lotes prioriza y los sitios chilenos promocionan ("sin pie / crédito directo"). Sumarlo a M3 (cobranza) además de la prefacturación.
 - **Firma electrónica** (GoFirmex o equivalente) para promesas/escrituras → integrar en M2.
-- Las **4 preguntas de calificación** y la **secuencia de re-insistencia** de Toscana son el estándar de facto: vienen de fábrica en Parcelasy.
+- Las **4 preguntas de calificación** y la **secuencia de re-insistencia** de Toscana son el estándar de facto: vienen de fábrica en 5000.

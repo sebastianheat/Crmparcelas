@@ -1,9 +1,11 @@
 @AGENTS.md
 
-# Parcelasy — contexto para Claude Code
+# 5000 — contexto para Claude Code
 
-CRM vertical para venta de parcelas en Chile (DL 3516). Lee `docs/Parcelasy_Spec.md`
-(PRD, decisiones cerradas) antes de cambios de producto. Idioma: español (Chile).
+CRM vertical para venta de parcelas en Chile (DL 3516). Marca: **5000** (dominio
+`5000.cl`, by HEAT) — por los 5.000 m² mínimos de una parcela de agrado. Lee
+`docs/5000_Spec.md` (PRD, decisiones cerradas) antes de cambios de producto.
+Idioma: español (Chile).
 
 ## Reglas del proyecto
 

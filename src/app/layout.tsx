@@ -13,9 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Parcelasy — CRM de parcelas",
+  title: "5000 — CRM de parcelas",
   description:
-    "El sistema operativo de la empresa parceladora: CRM, stock, prefacturación e IA. by HEAT.",
+    "El sistema operativo de la empresa parceladora: CRM, stock, prefacturación e IA. 5000.cl · by HEAT.",
 };
 
 export default function RootLayout({

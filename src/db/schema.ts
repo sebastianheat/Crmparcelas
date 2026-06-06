@@ -1,5 +1,5 @@
 /**
- * Parcelasy — Esquema de datos (Fase 1 / MVP)
+ * 5000 — Esquema de datos (Fase 1 / MVP)
  *
  * Principios de diseño:
  *  - Multi-tenant desde el día uno. Cada fila de negocio lleva `tenantId`.

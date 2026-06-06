@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# SessionStart hook — provisiona el entorno de Parcelasy en sesiones efímeras
+# SessionStart hook — provisiona el entorno de 5000 en sesiones efímeras
 # (Claude Code on the web). Levanta Postgres, crea la base, aplica migraciones,
 # el rol de aplicación y los datos demo. Idempotente y no bloqueante.
 set -uo pipefail
 cd "$(dirname "$0")/../.." || exit 0
 
-log() { echo "[parcelasy:setup] $*"; }
+log() { echo "[5000:setup] $*"; }
 
 # 1) Postgres en marcha (cluster local del contenedor).
 if ! pg_isready -q 2>/dev/null; then
@@ -19,19 +19,19 @@ if ! pg_isready -q 2>/dev/null; then
   exit 0
 fi
 
-# 2) Credenciales + base de datos.
+# 2) Credenciales + base de datos (nombre numérico → requiere comillas en SQL).
 su - postgres -c "psql -tAc \"ALTER USER postgres PASSWORD 'postgres';\"" >/dev/null 2>&1 || true
-if ! su - postgres -c "psql -tAc \"SELECT 1 FROM pg_database WHERE datname='parcelasy';\"" 2>/dev/null | grep -q 1; then
-  log "Creando base parcelasy…"
-  su - postgres -c "psql -tAc \"CREATE DATABASE parcelasy;\"" >/dev/null 2>&1 || true
+if ! su - postgres -c "psql -tAc \"SELECT 1 FROM pg_database WHERE datname='5000';\"" 2>/dev/null | grep -q 1; then
+  log "Creando base 5000…"
+  su - postgres -c "psql -tAc 'CREATE DATABASE \"5000\";'" >/dev/null 2>&1 || true
 fi
 
 # 3) .env.local si no existe (valores locales del contenedor).
 if [ ! -f .env.local ]; then
   log "Generando .env.local…"
   cat > .env.local <<'EOF'
-DATABASE_URL="postgresql://app_user:app_user@localhost:5432/parcelasy"
-DATABASE_ADMIN_URL="postgresql://postgres:postgres@localhost:5432/parcelasy"
+DATABASE_URL="postgresql://app_user:app_user@localhost:5432/5000"
+DATABASE_ADMIN_URL="postgresql://postgres:postgres@localhost:5432/5000"
 AUTH_SECRET="dev-secret-no-usar-en-produccion-1234567890abcdef"
 AUTH_TRUST_HOST="true"
 ANTHROPIC_API_KEY=""
@@ -48,13 +48,13 @@ if [ ! -d node_modules ]; then
 fi
 
 # 5) Migraciones + rol de aplicación + seed.
-export DATABASE_ADMIN_URL="postgresql://postgres:postgres@localhost:5432/parcelasy"
-export DATABASE_URL="postgresql://app_user:app_user@localhost:5432/parcelasy"
+export DATABASE_ADMIN_URL="postgresql://postgres:postgres@localhost:5432/5000"
+export DATABASE_URL="postgresql://app_user:app_user@localhost:5432/5000"
 log "Aplicando migraciones…"
 pnpm db:migrate >/dev/null 2>&1 || true
-PGPASSWORD=postgres psql -U postgres -h localhost -d parcelasy -f scripts/setup-roles.sql >/dev/null 2>&1 || true
+PGPASSWORD=postgres psql -U postgres -h localhost -d 5000 -f scripts/setup-roles.sql >/dev/null 2>&1 || true
 log "Sembrando datos demo…"
 pnpm db:seed >/dev/null 2>&1 || true
 
-log "Listo. Login demo: admin@parcelasy.cl / Parcelasy2026"
+log "Listo. Login demo: admin@5000.cl / Cincomil2026"
 exit 0

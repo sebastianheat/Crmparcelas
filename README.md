@@ -1,8 +1,8 @@
-# Parcelasy
+# 5000
 
-> CRM/RP vertical 100% especializado en la **venta de parcelas en Chile** (parcelas de agrado bajo DL 3516). El sistema operativo de la empresa parceladora: CRM, stock, prefacturación e IA. **by HEAT.**
+> CRM/RP vertical 100% especializado en la **venta de parcelas en Chile** (parcelas de agrado bajo DL 3516 — mínimo **5.000 m²**, de ahí el nombre). El sistema operativo de la empresa parceladora: CRM, stock, prefacturación e IA. **5000.cl · by HEAT.**
 
-Especificación completa del producto en [`docs/Parcelasy_Spec.md`](docs/Parcelasy_Spec.md) e inteligencia de mercado en [`docs/Parcelasy_Repositorio_Referencia.md`](docs/Parcelasy_Repositorio_Referencia.md).
+Especificación completa del producto en [`docs/5000_Spec.md`](docs/5000_Spec.md) e inteligencia de mercado en [`docs/5000_Repositorio_Referencia.md`](docs/5000_Repositorio_Referencia.md).
 
 ## Estado: Fase 1 (MVP) — el núcleo de orden
 
@@ -24,7 +24,7 @@ Próximas fases (CRM/embudo, agente IA WhatsApp, comisiones, contenido, Ads, mar
 - **Postgres** + **Drizzle ORM** (con RLS por tenant)
 - **Auth.js** (credenciales + JWT)
 - **Anthropic Claude** para generación de texto
-- Deploy objetivo: **Vercel**
+- Dominio: **5000.cl** · Deploy objetivo: **Vercel**
 
 ## Puesta en marcha (local)
 
@@ -35,7 +35,7 @@ pnpm install
 cp .env.example .env.local            # ajusta credenciales si hace falta
 
 # Rol de aplicación (RLS), migraciones y datos demo
-createdb parcelasy                    # o CREATE DATABASE parcelasy;
+createdb 5000                         # o CREATE DATABASE "5000";
 pnpm db:migrate
 psql "$DATABASE_ADMIN_URL" -f scripts/setup-roles.sql
 pnpm db:seed
@@ -43,7 +43,7 @@ pnpm db:seed
 pnpm dev                              # http://localhost:3000
 ```
 
-**Login demo:** `admin@parcelasy.cl` · `Parcelasy2026`
+**Login demo:** `admin@5000.cl` · `Cincomil2026`
 
 > En sesiones de Claude Code en la web, el hook `.claude/hooks/session-start.sh` provisiona Postgres + migraciones + seed automáticamente.
 

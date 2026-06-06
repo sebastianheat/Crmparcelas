@@ -28,8 +28,8 @@ import {
 import * as schema from "./schema";
 
 const DEMO_SLUG = "toscana";
-const ADMIN_EMAIL = "admin@parcelasy.cl";
-const ADMIN_PASSWORD = "Parcelasy2026";
+const ADMIN_EMAIL = "admin@5000.cl";
+const ADMIN_PASSWORD = "Cincomil2026";
 
 const adminUrl = process.env.DATABASE_ADMIN_URL ?? process.env.DATABASE_URL;
 if (!adminUrl) throw new Error("Define DATABASE_ADMIN_URL o DATABASE_URL");
