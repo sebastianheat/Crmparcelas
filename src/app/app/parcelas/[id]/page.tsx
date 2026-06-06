@@ -13,8 +13,9 @@ import {
 } from "@/components/ui";
 import { EVENT_LABELS, PARCEL_STATUS } from "@/lib/labels";
 import { formatClp, formatPrice } from "@/lib/money";
+import { ROLE_LABELS } from "@/lib/roles";
 import { applyParcelEvent } from "@/server/actions";
-import { getParcel, listClients } from "@/server/queries";
+import { getParcel, listClients, listSellers } from "@/server/queries";
 
 const EVENT_OPTIONS: { value: string; label: string }[] = [
   { value: "reserva", label: "Reserva (ingresa dinero)" },
@@ -35,7 +36,11 @@ export default async function ParcelPage({
   params,
 }: PageProps<"/app/parcelas/[id]">) {
   const { id } = await params;
-  const [parcel, clients] = await Promise.all([getParcel(id), listClients()]);
+  const [parcel, clients, sellers] = await Promise.all([
+    getParcel(id),
+    listClients(),
+    listSellers(),
+  ]);
   if (!parcel) notFound();
 
   const ps = PARCEL_STATUS[parcel.status];
@@ -99,6 +104,19 @@ export default async function ParcelPage({
                 </Select>
               </Field>
             </div>
+            <Field
+              label="Vendedor responsable"
+              hint="Obligatorio en reservas/promesas con dinero"
+            >
+              <Select name="sellerId" defaultValue="">
+                <option value="">—</option>
+                {sellers.map((s) => (
+                  <option key={s.userId} value={s.userId}>
+                    {s.name} · {ROLE_LABELS[s.role]}
+                  </option>
+                ))}
+              </Select>
+            </Field>
             <Field
               label="Código de repertorio"
               hint="Gatillo de la venta exenta (solo escritura)"

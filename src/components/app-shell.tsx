@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
-import { ROLE_LABELS } from "@/lib/roles";
+import { ROLE_LABELS, can } from "@/lib/roles";
 import type { Role } from "@/db/schema";
 import { doSignOut } from "@/app/app/auth-actions";
 
@@ -23,6 +23,7 @@ const NAV: { section: string; items: NavItem[] }[] = [
       { href: "/app/proyectos", label: "Proyectos y Stock", icon: "▤" },
       { href: "/app/prefacturacion", label: "Prefacturación", icon: "₿" },
       { href: "/app/costos", label: "Costos", icon: "▸" },
+      { href: "/app/equipo", label: "Equipo", icon: "◆" },
     ],
   },
   {
@@ -66,7 +67,13 @@ export function AppShell({
                 {group.section}
               </p>
               <ul className="space-y-1">
-                {group.items.map((item) => {
+                {group.items
+                  .filter(
+                    (item) =>
+                      item.href !== "/app/equipo" ||
+                      can(role, "users:manage"),
+                  )
+                  .map((item) => {
                   const active =
                     !item.soon &&
                     (item.href === "/app"

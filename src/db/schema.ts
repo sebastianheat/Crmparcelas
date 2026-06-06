@@ -34,6 +34,11 @@ export const roleEnum = pgEnum("role", [
   "vendedor",
   "finanzas",
   "corredor",
+  // Set completo (Fase 2): jerarquía comercial y de finanzas.
+  "gerente_comercial",
+  "gerente_finanzas",
+  "contador",
+  "cajero",
 ]);
 
 /** Badge de estado del proyecto (Anexo C.5 del spec). */
@@ -92,9 +97,10 @@ export const accessTypeEnum = pgEnum("access_type", [
 
 /** Comprobante de dinero / prefactura (M3, el diferenciador). */
 export const voucherStatusEnum = pgEnum("voucher_status", [
-  "registrado",
+  "registrado", // pendiente de validación por finanzas
   "anulado",
   "facturado",
+  "validado", // finanzas confirmó el dinero con comprobante → PDF emitido
 ]);
 
 /** Factura exenta (M3). */
@@ -326,6 +332,11 @@ export const parcelEvents = pgTable(
     // Condiciones (plazos, obras), vale vista, etc.
     payload: jsonb("payload").$type<Record<string, unknown>>().default({}),
     note: text("note"),
+    // Vendedor del equipo responsable del movimiento (puede diferir de quien lo
+    // registra: un jefe puede cargar la reserva de un vendedor).
+    sellerUserId: uuid("seller_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
     createdByUserId: uuid("created_by_user_id").references(() => users.id, {
       onDelete: "set null",
     }),
@@ -365,6 +376,18 @@ export const moneyVouchers = pgTable(
     concept: text("concept").notNull(),
     amountClp: numeric("amount_clp", { precision: 14, scale: 2 }).notNull(),
     status: voucherStatusEnum("status").default("registrado").notNull(),
+    // Vendedor responsable de la reserva/venta (M8 comisiones).
+    sellerUserId: uuid("seller_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    // Validación por finanzas: foto del comprobante de depósito/transferencia
+    // (obligatoria) y PDF de la reserva generado al validar.
+    proofUrl: text("proof_url"),
+    pdfUrl: text("pdf_url"),
+    validatedByUserId: uuid("validated_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    validatedAt: timestamp("validated_at", { withTimezone: true }),
     issuedAt: timestamp("issued_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

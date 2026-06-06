@@ -1,13 +1,17 @@
 import { desc, eq } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import {
   clients,
   costs,
+  memberships,
   moneyVouchers,
   parcelEvents,
   parcels,
   projects,
+  users,
 } from "@/db/schema";
 import { toNumber } from "@/lib/money";
+import { SELLER_ROLES } from "@/lib/roles";
 import { withCurrentTenant } from "@/lib/session";
 
 // ─── Proyectos ────────────────────────────────────────────────────────────────
@@ -64,6 +68,43 @@ export function listClients() {
   );
 }
 
+// ─── Equipo (usuarios y roles) ────────────────────────────────────────────────
+
+export function listMembers() {
+  return withCurrentTenant(async (tx, { tenantId }) =>
+    tx
+      .select({
+        membershipId: memberships.id,
+        userId: users.id,
+        name: users.name,
+        email: users.email,
+        role: memberships.role,
+        createdAt: memberships.createdAt,
+      })
+      .from(memberships)
+      .innerJoin(users, eq(memberships.userId, users.id))
+      .where(eq(memberships.tenantId, tenantId))
+      .orderBy(users.name),
+  );
+}
+
+/** Miembros que pueden figurar como vendedor responsable de una reserva. */
+export function listSellers() {
+  return withCurrentTenant(async (tx, { tenantId }) => {
+    const rows = await tx
+      .select({
+        userId: users.id,
+        name: users.name,
+        role: memberships.role,
+      })
+      .from(memberships)
+      .innerJoin(users, eq(memberships.userId, users.id))
+      .where(eq(memberships.tenantId, tenantId))
+      .orderBy(users.name);
+    return rows.filter((r) => SELLER_ROLES.includes(r.role));
+  });
+}
+
 // ─── Prefacturación ───────────────────────────────────────────────────────────
 
 export function listVouchers() {
@@ -76,6 +117,8 @@ export function listVouchers() {
 }
 
 export function getVouchersDetailed() {
+  const sellerUser = alias(users, "seller_user");
+  const validatorUser = alias(users, "validator_user");
   return withCurrentTenant(async (tx) => {
     const rows = await tx
       .select({
@@ -83,11 +126,18 @@ export function getVouchersDetailed() {
         projectName: projects.name,
         parcelCode: parcels.code,
         clientName: clients.name,
+        sellerName: sellerUser.name,
+        validatedByName: validatorUser.name,
       })
       .from(moneyVouchers)
       .leftJoin(projects, eq(moneyVouchers.projectId, projects.id))
       .leftJoin(parcels, eq(moneyVouchers.parcelId, parcels.id))
       .leftJoin(clients, eq(moneyVouchers.clientId, clients.id))
+      .leftJoin(sellerUser, eq(moneyVouchers.sellerUserId, sellerUser.id))
+      .leftJoin(
+        validatorUser,
+        eq(moneyVouchers.validatedByUserId, validatorUser.id),
+      )
       .orderBy(desc(moneyVouchers.issuedAt));
     return rows;
   });

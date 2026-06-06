@@ -2,21 +2,31 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { hash } from "bcryptjs";
 import { eq, max } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
+import { db } from "@/db/client";
+import { withTenant } from "@/db/tenant";
 import {
   clients,
   costs,
   invoices,
+  memberships,
   moneyVouchers,
   parcelEvents,
   parcels,
   projects,
+  users,
   type ParcelEventType,
+  type Role,
 } from "@/db/schema";
 import { generateLandingCopy } from "@/lib/ai/claude";
 import { getDteProvider } from "@/lib/dte";
 import { EVENT_TO_STATUS } from "@/lib/labels";
+import { generateReservaPdf } from "@/lib/pdf";
+import { uploadBlob } from "@/lib/blob";
+import { ASSIGNABLE_ROLES } from "@/lib/roles";
 import { withCurrentTenant, requirePermission } from "@/lib/session";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -196,8 +206,14 @@ export async function applyParcelEvent(formData: FormData) {
   const type = String(formData.get("type")) as ParcelEventType;
   const amountClp = num(formData.get("amountClp"));
   const clientId = String(formData.get("clientId") || "") || null;
+  const sellerId = String(formData.get("sellerId") || "") || null;
   const repertorioCode = String(formData.get("repertorioCode") || "") || null;
   const note = String(formData.get("note") || "") || null;
+
+  // Para movimientos con dinero, el vendedor responsable es obligatorio.
+  if (amountClp && moneyEventTypes.includes(type) && !sellerId) {
+    throw new Error("Selecciona el vendedor responsable de la reserva.");
+  }
 
   let projectSlug = "";
   await withCurrentTenant(async (tx, { tenantId, userId }) => {
@@ -219,6 +235,7 @@ export async function applyParcelEvent(formData: FormData) {
         amountClp,
         repertorioCode,
         note,
+        sellerUserId: sellerId,
         createdByUserId: userId,
       })
       .returning();
@@ -249,6 +266,7 @@ export async function applyParcelEvent(formData: FormData) {
         folio: (lastFolio ?? 0) + 1,
         concept: `${type} parcela ${parcel.code}`,
         amountClp,
+        sellerUserId: sellerId,
         createdByUserId: userId,
       });
     }
@@ -310,6 +328,11 @@ export async function emitExentInvoice(formData: FormData) {
       where: eq(moneyVouchers.id, voucherId),
     });
     if (!voucher) throw new Error("Comprobante no encontrado");
+    if (voucher.status !== "validado") {
+      throw new Error(
+        "El comprobante debe estar validado por finanzas antes de facturar.",
+      );
+    }
 
     const provider = getDteProvider();
     const result = await provider.emitExentInvoice({
@@ -336,6 +359,129 @@ export async function emitExentInvoice(formData: FormData) {
     await tx
       .update(moneyVouchers)
       .set({ status: "facturado" })
+      .where(eq(moneyVouchers.id, voucherId));
+  });
+
+  revalidatePath("/app/prefacturacion");
+}
+
+// ─── Equipo: usuarios y roles ─────────────────────────────────────────────────
+
+export async function createUser(formData: FormData) {
+  const session = await requirePermission("users:manage");
+
+  const email = String(formData.get("email") || "").trim().toLowerCase();
+  const name = String(formData.get("name") || "").trim();
+  const password = String(formData.get("password") || "");
+  const role = String(formData.get("role") || "") as Role;
+
+  if (!email || !name) throw new Error("Nombre y correo son obligatorios.");
+  if (password.length < 6) throw new Error("La contraseña debe tener 6+ caracteres.");
+  if (!ASSIGNABLE_ROLES.includes(role)) throw new Error("Rol inválido.");
+
+  const passwordHash = await hash(password, 10);
+
+  // users/memberships son globales (sin RLS).
+  await db.transaction(async (tx) => {
+    const existing = await tx.query.users.findFirst({
+      where: eq(users.email, email),
+    });
+    let userId: string;
+    if (existing) {
+      userId = existing.id;
+    } else {
+      const [u] = await tx
+        .insert(users)
+        .values({ email, name, passwordHash })
+        .returning();
+      userId = u.id;
+    }
+    await tx
+      .insert(memberships)
+      .values({ userId, tenantId: session.tenantId, role })
+      .onConflictDoUpdate({
+        target: [memberships.userId, memberships.tenantId],
+        set: { role },
+      });
+  });
+
+  revalidatePath("/app/equipo");
+}
+
+// ─── Validación de reserva (finanzas) con comprobante obligatorio + PDF ────────
+
+export async function validateVoucher(formData: FormData) {
+  const session = await requirePermission("reservas:validate");
+  const voucherId = String(formData.get("voucherId"));
+  const proof = formData.get("proof");
+
+  if (!(proof instanceof File) || proof.size === 0) {
+    throw new Error(
+      "Debes adjuntar la foto del comprobante de depósito/transferencia.",
+    );
+  }
+
+  // 1) Subir la foto del comprobante a Vercel Blob.
+  const proofUrl = await uploadBlob(
+    `comprobantes/proof-${voucherId}`,
+    proof,
+    proof.type || "image/jpeg",
+  );
+  const proofBytes = new Uint8Array(await proof.arrayBuffer());
+
+  await withTenant(session.tenantId, async (tx) => {
+    const sellerUser = alias(users, "seller_user");
+    const [info] = await tx
+      .select({
+        voucher: moneyVouchers,
+        projectName: projects.name,
+        parcelCode: parcels.code,
+        clientName: clients.name,
+        sellerName: sellerUser.name,
+      })
+      .from(moneyVouchers)
+      .leftJoin(projects, eq(moneyVouchers.projectId, projects.id))
+      .leftJoin(parcels, eq(moneyVouchers.parcelId, parcels.id))
+      .leftJoin(clients, eq(moneyVouchers.clientId, clients.id))
+      .leftJoin(sellerUser, eq(moneyVouchers.sellerUserId, sellerUser.id))
+      .where(eq(moneyVouchers.id, voucherId));
+
+    if (!info) throw new Error("Comprobante no encontrado.");
+    const validatedAt = new Date();
+
+    // 2) Generar el PDF de la reserva con el comprobante embebido.
+    const pdf = await generateReservaPdf(
+      {
+        tenantName: session.tenantName,
+        folio: info.voucher.folio,
+        concept: info.voucher.concept,
+        amountClp: info.voucher.amountClp,
+        projectName: info.projectName ?? "—",
+        parcelCode: info.parcelCode ?? "—",
+        clientName: info.clientName,
+        sellerName: info.sellerName,
+        validatedByName: session.user.name,
+        validatedAt,
+        proofUrl,
+      },
+      { bytes: proofBytes, type: proof.type || "image/jpeg" },
+    );
+    const pdfUrl = await uploadBlob(
+      `comprobantes/reserva-${info.voucher.folio}.pdf`,
+      Buffer.from(pdf),
+      "application/pdf",
+    );
+
+    // 3) Marcar validado.
+    await tx
+      .update(moneyVouchers)
+      .set({
+        status: "validado",
+        proofUrl,
+        pdfUrl,
+        validatedByUserId: session.user.id,
+        validatedAt,
+      })
       .where(eq(moneyVouchers.id, voucherId));
   });
 
