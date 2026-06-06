@@ -10,9 +10,12 @@ const globalForDb = globalThis as unknown as {
 
 function getClient() {
   if (globalForDb.__pg) return globalForDb.__pg;
-  const connectionString = process.env.DATABASE_URL;
+  // Acepta DATABASE_URL (local) o POSTGRES_URL (lo que inyecta la integración
+  // Neon/Vercel). Pooled está bien en runtime: usamos prepare:false.
+  const connectionString =
+    process.env.DATABASE_URL ?? process.env.POSTGRES_URL;
   if (!connectionString) {
-    throw new Error("DATABASE_URL no está definida");
+    throw new Error("DATABASE_URL (o POSTGRES_URL) no está definida");
   }
   const client = postgres(connectionString, {
     max: 10,

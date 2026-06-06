@@ -31,7 +31,11 @@ const DEMO_SLUG = "toscana";
 const ADMIN_EMAIL = "admin@5000.cl";
 const ADMIN_PASSWORD = "Cincomil2026";
 
-const adminUrl = process.env.DATABASE_ADMIN_URL ?? process.env.DATABASE_URL;
+const adminUrl =
+  process.env.DATABASE_ADMIN_URL ??
+  process.env.POSTGRES_URL_NON_POOLING ??
+  process.env.DATABASE_URL ??
+  process.env.POSTGRES_URL;
 if (!adminUrl) throw new Error("Define DATABASE_ADMIN_URL o DATABASE_URL");
 
 const sqlClient = postgres(adminUrl, { max: 1, prepare: false });
