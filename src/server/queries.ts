@@ -4,6 +4,8 @@ import {
   clients,
   costs,
   installments,
+  leadActivities,
+  leads,
   legalCases,
   memberships,
   moneyVouchers,
@@ -230,6 +232,78 @@ export function getCommissions() {
       { cobros: 0, comision: 0 },
     );
     return { rows, totals };
+  });
+}
+
+// ─── CRM — Leads y embudo ─────────────────────────────────────────────────────
+
+export function listLeads() {
+  return withCurrentTenant(async (tx) => {
+    const assignee = alias(users, "assignee");
+    const rows = await tx
+      .select({
+        lead: leads,
+        assignedName: assignee.name,
+        projectName: projects.name,
+      })
+      .from(leads)
+      .leftJoin(assignee, eq(leads.assignedToUserId, assignee.id))
+      .leftJoin(projects, eq(leads.projectId, projects.id))
+      .orderBy(desc(leads.updatedAt));
+
+    const stageCounts: Record<string, number> = {};
+    let activos = 0;
+    let pipelineValue = 0;
+    for (const r of rows) {
+      stageCounts[r.lead.stage] = (stageCounts[r.lead.stage] ?? 0) + 1;
+      if (r.lead.stage !== "ganado" && r.lead.stage !== "perdido") {
+        activos += 1;
+        pipelineValue += toNumber(r.lead.estimatedValueClp) ?? 0;
+      }
+    }
+    const ganados = stageCounts["ganado"] ?? 0;
+    const cerrados = ganados + (stageCounts["perdido"] ?? 0);
+    const conversion = cerrados > 0 ? Math.round((ganados / cerrados) * 100) : 0;
+    return {
+      rows,
+      stats: {
+        total: rows.length,
+        activos,
+        ganados,
+        conversion,
+        pipelineValue,
+      },
+      stageCounts,
+    };
+  });
+}
+
+export function getLead(id: string) {
+  return withCurrentTenant(async (tx) => {
+    const assignee = alias(users, "assignee");
+    const author = alias(users, "author");
+    const [row] = await tx
+      .select({
+        lead: leads,
+        assignedName: assignee.name,
+        projectName: projects.name,
+      })
+      .from(leads)
+      .leftJoin(assignee, eq(leads.assignedToUserId, assignee.id))
+      .leftJoin(projects, eq(leads.projectId, projects.id))
+      .where(eq(leads.id, id))
+      .limit(1);
+    if (!row) return null;
+    const activities = await tx
+      .select({
+        activity: leadActivities,
+        authorName: author.name,
+      })
+      .from(leadActivities)
+      .leftJoin(author, eq(leadActivities.createdByUserId, author.id))
+      .where(eq(leadActivities.leadId, id))
+      .orderBy(desc(leadActivities.createdAt));
+    return { ...row, activities };
   });
 }
 

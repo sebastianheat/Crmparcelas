@@ -13,6 +13,8 @@ import {
   costs,
   installments,
   invoices,
+  leadActivities,
+  leads,
   legalCases,
   memberships,
   moneyVouchers,
@@ -1059,4 +1061,140 @@ export async function setCommissionPct(formData: FormData) {
       .where(eq(memberships.userId, userId));
   });
   revalidatePath("/app/comisiones");
+}
+
+// ─── CRM — Leads y embudo de ventas (Fase 2) ──────────────────────────────────
+
+export async function createLead(formData: FormData) {
+  await requirePermission("reservas:create");
+  const name = String(formData.get("name") || "").trim();
+  if (name.length < 2) throw new Error("Indica el nombre del lead.");
+  const str = (k: string) => String(formData.get(k) || "").trim() || null;
+  const assignedTo = str("assignedToUserId");
+  await withCurrentTenant(async (tx, { tenantId, userId }) => {
+    await tx.insert(leads).values({
+      tenantId,
+      name,
+      phone: str("phone"),
+      email: str("email"),
+      source: (str("source") ?? "web") as
+        | "web"
+        | "whatsapp"
+        | "instagram"
+        | "facebook"
+        | "portal"
+        | "referido"
+        | "otro",
+      projectId: str("projectId"),
+      assignedToUserId: assignedTo,
+      estimatedValueClp: num(formData.get("estimatedValueClp")),
+      notes: str("notes"),
+      createdByUserId: userId,
+    });
+  });
+  revalidatePath("/app/crm");
+}
+
+export async function updateLeadStage(formData: FormData) {
+  await requirePermission("reservas:create");
+  const id = String(formData.get("id"));
+  const stage = String(formData.get("stage")) as
+    | "nuevo"
+    | "contactado"
+    | "calificado"
+    | "visita"
+    | "negociacion"
+    | "ganado"
+    | "perdido";
+  const lostReason = String(formData.get("lostReason") || "").trim() || null;
+  await withCurrentTenant(async (tx, { tenantId, userId }) => {
+    await tx
+      .update(leads)
+      .set({
+        stage,
+        lostReason: stage === "perdido" ? lostReason : null,
+        lastContactAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(leads.id, id));
+    await tx.insert(leadActivities).values({
+      tenantId,
+      leadId: id,
+      type: "cambio_etapa",
+      note: `Etapa → ${stage}${lostReason ? ` (${lostReason})` : ""}`,
+      createdByUserId: userId,
+    });
+  });
+  revalidatePath("/app/crm");
+  revalidatePath(`/app/crm/${id}`);
+}
+
+export async function assignLead(formData: FormData) {
+  await requirePermission("reservas:create");
+  const id = String(formData.get("id"));
+  const assignedToUserId = String(formData.get("assignedToUserId") || "") || null;
+  await withCurrentTenant(async (tx) => {
+    await tx
+      .update(leads)
+      .set({ assignedToUserId, updatedAt: new Date() })
+      .where(eq(leads.id, id));
+  });
+  revalidatePath("/app/crm");
+  revalidatePath(`/app/crm/${id}`);
+}
+
+export async function addLeadActivity(formData: FormData) {
+  await requirePermission("reservas:create");
+  const leadId = String(formData.get("leadId"));
+  const type = String(formData.get("type") || "nota") as
+    | "nota"
+    | "llamada"
+    | "whatsapp"
+    | "email"
+    | "visita"
+    | "cambio_etapa";
+  const note = String(formData.get("note") || "").trim() || null;
+  await withCurrentTenant(async (tx, { tenantId, userId }) => {
+    await tx.insert(leadActivities).values({
+      tenantId,
+      leadId,
+      type,
+      note,
+      createdByUserId: userId,
+    });
+    await tx
+      .update(leads)
+      .set({ lastContactAt: new Date(), updatedAt: new Date() })
+      .where(eq(leads.id, leadId));
+  });
+  revalidatePath(`/app/crm/${leadId}`);
+}
+
+export async function convertLeadToClient(formData: FormData) {
+  await requirePermission("reservas:create");
+  const id = String(formData.get("id"));
+  let clientId = "";
+  await withCurrentTenant(async (tx, { tenantId }) => {
+    const lead = await tx.query.leads.findFirst({ where: eq(leads.id, id) });
+    if (!lead) throw new Error("Lead no encontrado.");
+    if (lead.clientId) {
+      clientId = lead.clientId;
+      return;
+    }
+    const [client] = await tx
+      .insert(clients)
+      .values({
+        tenantId,
+        name: lead.name,
+        phone: lead.phone,
+        email: lead.email,
+      })
+      .returning({ id: clients.id });
+    clientId = client.id;
+    await tx
+      .update(leads)
+      .set({ clientId, stage: "ganado", updatedAt: new Date() })
+      .where(eq(leads.id, id));
+  });
+  if (clientId) redirect(`/app/clientes`);
 }

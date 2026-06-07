@@ -749,6 +749,107 @@ export const promesaTemplates = pgTable(
   (t) => [index("promesa_templates_tenant_idx").on(t.tenantId)],
 );
 
+// ─── Fase 2 — CRM: leads y embudo de ventas ──────────────────────────────────
+
+export const leadStageEnum = pgEnum("lead_stage", [
+  "nuevo",
+  "contactado",
+  "calificado",
+  "visita",
+  "negociacion",
+  "ganado",
+  "perdido",
+]);
+
+export const leadSourceEnum = pgEnum("lead_source", [
+  "web",
+  "whatsapp",
+  "instagram",
+  "facebook",
+  "portal",
+  "referido",
+  "otro",
+]);
+
+export const leadActivityTypeEnum = pgEnum("lead_activity_type", [
+  "nota",
+  "llamada",
+  "whatsapp",
+  "email",
+  "visita",
+  "cambio_etapa",
+]);
+
+export const leads = pgTable(
+  "leads",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    phone: text("phone"),
+    email: text("email"),
+    source: leadSourceEnum("source").default("web").notNull(),
+    stage: leadStageEnum("stage").default("nuevo").notNull(),
+    projectId: uuid("project_id").references(() => projects.id, {
+      onDelete: "set null",
+    }),
+    assignedToUserId: uuid("assigned_to_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    clientId: uuid("client_id").references(() => clients.id, {
+      onDelete: "set null",
+    }),
+    estimatedValueClp: numeric("estimated_value_clp", {
+      precision: 14,
+      scale: 2,
+    }),
+    notes: text("notes"),
+    lostReason: text("lost_reason"),
+    lastContactAt: timestamp("last_contact_at", { withTimezone: true }),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    index("leads_tenant_idx").on(t.tenantId),
+    index("leads_stage_idx").on(t.stage),
+    index("leads_assigned_idx").on(t.assignedToUserId),
+  ],
+);
+
+export const leadActivities = pgTable(
+  "lead_activities",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    leadId: uuid("lead_id")
+      .notNull()
+      .references(() => leads.id, { onDelete: "cascade" }),
+    type: leadActivityTypeEnum("type").default("nota").notNull(),
+    note: text("note"),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    index("lead_activities_tenant_idx").on(t.tenantId),
+    index("lead_activities_lead_idx").on(t.leadId),
+  ],
+);
+
 // ─── M2 — Causas legales (querellas / denuncias por parcela o cliente) ────────
 
 export const legalCaseTypeEnum = pgEnum("legal_case_type", [
@@ -911,6 +1012,8 @@ export type PromesaTemplate = typeof promesaTemplates.$inferSelect;
 export type PaymentPlan = typeof paymentPlans.$inferSelect;
 export type Installment = typeof installments.$inferSelect;
 export type LegalCase = typeof legalCases.$inferSelect;
+export type Lead = typeof leads.$inferSelect;
+export type LeadActivity = typeof leadActivities.$inferSelect;
 export type Acquisition = NonNullable<Project["acquisition"]>;
 
 /** Tablas de negocio sujetas a Row-Level Security por tenant. */
@@ -930,6 +1033,8 @@ export const TENANT_SCOPED_TABLES = [
   "payment_plans",
   "installments",
   "legal_cases",
+  "leads",
+  "lead_activities",
 ] as const;
 
 export { sql };

@@ -81,6 +81,49 @@ export const RIESGO: Record<
   alto: { label: "Riesgo alto", tone: "red" },
 };
 
+// Embudo de ventas (orden = avance en el pipeline).
+export const LEAD_STAGES = [
+  "nuevo",
+  "contactado",
+  "calificado",
+  "visita",
+  "negociacion",
+  "ganado",
+  "perdido",
+] as const;
+
+export const LEAD_STAGE: Record<
+  string,
+  { label: string; tone: "slate" | "blue" | "amber" | "green" | "red" }
+> = {
+  nuevo: { label: "Nuevo", tone: "slate" },
+  contactado: { label: "Contactado", tone: "blue" },
+  calificado: { label: "Calificado", tone: "blue" },
+  visita: { label: "Visita", tone: "amber" },
+  negociacion: { label: "Negociación", tone: "amber" },
+  ganado: { label: "Ganado", tone: "green" },
+  perdido: { label: "Perdido", tone: "red" },
+};
+
+export const LEAD_SOURCE: Record<string, string> = {
+  web: "Web",
+  whatsapp: "WhatsApp",
+  instagram: "Instagram",
+  facebook: "Facebook",
+  portal: "Portal inmobiliario",
+  referido: "Referido",
+  otro: "Otro",
+};
+
+export const LEAD_ACTIVITY_TYPE: Record<string, string> = {
+  nota: "Nota",
+  llamada: "Llamada",
+  whatsapp: "WhatsApp",
+  email: "Email",
+  visita: "Visita",
+  cambio_etapa: "Cambio de etapa",
+};
+
 export const LEGAL_CASE_TYPE: Record<string, string> = {
   querella: "Querella",
   denuncia: "Denuncia",
