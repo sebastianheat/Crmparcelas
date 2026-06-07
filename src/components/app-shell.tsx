@@ -26,10 +26,12 @@ const NAV: { section: string; items: NavItem[] }[] = [
       { href: "/app/clientes", label: "Clientes", icon: "◉" },
       { href: "/app/prefacturacion", label: "Prefacturación", icon: "₿" },
       { href: "/app/cobranza", label: "Cobranza", icon: "◷" },
+      { href: "/app/recordatorios", label: "Recordatorios", icon: "◔" },
       { href: "/app/conciliacion", label: "Conciliación", icon: "⇄" },
       { href: "/app/flujo-caja", label: "Flujo de caja", icon: "≈" },
       { href: "/app/comisiones", label: "Comisiones", icon: "％" },
       { href: "/app/costos", label: "Costos", icon: "▸" },
+      { href: "/app/reportes", label: "Reportes", icon: "▥" },
       { href: "/app/sociedades", label: "Sociedades", icon: "⬢" },
       { href: "/app/matrices", label: "Matrices legales", icon: "▦" },
       { href: "/app/legal", label: "Causas legales", icon: "⚖" },
@@ -90,6 +92,9 @@ export function AppShell({
                         can(role, "finance:read")) &&
                       ((item.href !== "/app/crm" &&
                         item.href !== "/app/whatsapp") ||
+                        can(role, "reservas:create")) &&
+                      (item.href !== "/app/reportes" ||
+                        can(role, "finance:read") ||
                         can(role, "reservas:create")),
                   )
                   .map((item) => {

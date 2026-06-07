@@ -44,6 +44,7 @@ import { generatePromesaText } from "@/lib/promesa";
 import { storeFile } from "@/lib/storage";
 import { getBankProvider } from "@/lib/bank";
 import { handleInboundWhatsApp } from "@/lib/whatsapp/agent";
+import { runRemindersForTenant } from "@/lib/reminders";
 import { ASSIGNABLE_ROLES } from "@/lib/roles";
 import { withCurrentTenant, requirePermission } from "@/lib/session";
 
@@ -1360,4 +1361,14 @@ export async function deleteClientDocument(formData: FormData) {
     await tx.delete(clientDocuments).where(eq(clientDocuments.id, id));
   });
   revalidatePath(`/app/clientes/${clientId}`);
+}
+
+// ─── Recordatorios automáticos ────────────────────────────────────────────────
+
+export async function runRemindersNow() {
+  await requirePermission("events:write");
+  const tenantId = await withCurrentTenant(async (_tx, ctx) => ctx.tenantId);
+  await runRemindersForTenant(tenantId);
+  revalidatePath("/app/recordatorios");
+  revalidatePath("/app/cobranza");
 }

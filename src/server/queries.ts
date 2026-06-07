@@ -1,4 +1,4 @@
-import { desc, eq, sum } from "drizzle-orm";
+import { and, desc, eq, inArray, lte, sum } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import {
   clients,
@@ -131,6 +131,64 @@ export function getParcel(id: string) {
 }
 
 // ─── Cobranza (dashboard de cuotas) ───────────────────────────────────────────
+
+/** Cuotas en formato plano para exportación / reportes. */
+export function getInstallmentsExport() {
+  return withCurrentTenant((tx) =>
+    tx
+      .select({
+        inst: installments,
+        parcelCode: parcels.code,
+        projectName: projects.name,
+        clientName: clients.name,
+      })
+      .from(installments)
+      .leftJoin(parcels, eq(installments.parcelId, parcels.id))
+      .leftJoin(projects, eq(parcels.projectId, projects.id))
+      .leftJoin(clients, eq(parcels.currentClientId, clients.id))
+      .orderBy(installments.dueDate),
+  );
+}
+
+/** Vista previa de cuántos recordatorios se generarían. */
+export function getRemindersPreview() {
+  return withCurrentTenant(async (tx) => {
+    const now = Date.now();
+    const t3 = new Date(now + 3 * 86_400_000);
+    const cuotas = await tx
+      .select({ id: installments.id, dueDate: installments.dueDate })
+      .from(installments)
+      .where(
+        and(
+          eq(installments.status, "pendiente"),
+          lte(installments.dueDate, t3),
+        ),
+      );
+    const vencidas = cuotas.filter((c) => new Date(c.dueDate).getTime() < now).length;
+    const porVencer = cuotas.length - vencidas;
+
+    const activos = await tx
+      .select({
+        lastContactAt: leads.lastContactAt,
+        createdAt: leads.createdAt,
+      })
+      .from(leads)
+      .where(
+        inArray(leads.stage, [
+          "nuevo",
+          "contactado",
+          "calificado",
+          "visita",
+          "negociacion",
+        ]),
+      );
+    const leadsStale = activos.filter(
+      (l) => now - (l.lastContactAt ?? l.createdAt).getTime() > 3 * 86_400_000,
+    ).length;
+
+    return { vencidas, porVencer, leadsStale };
+  });
+}
 
 // ─── Flujo de caja proyectado (desde las cuotas comprometidas) ────────────────
 

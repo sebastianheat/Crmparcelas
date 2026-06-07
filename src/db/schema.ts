@@ -716,6 +716,7 @@ export const installments = pgTable(
     amountClp: numeric("amount_clp", { precision: 14, scale: 2 }).notNull(),
     status: installmentStatusEnum("status").default("pendiente").notNull(),
     paidAt: timestamp("paid_at", { withTimezone: true }),
+    reminderSentAt: timestamp("reminder_sent_at", { withTimezone: true }),
     voucherId: uuid("voucher_id").references(() => moneyVouchers.id, {
       onDelete: "set null",
     }),
@@ -808,6 +809,7 @@ export const leads = pgTable(
     notes: text("notes"),
     lostReason: text("lost_reason"),
     lastContactAt: timestamp("last_contact_at", { withTimezone: true }),
+    reminderSentAt: timestamp("reminder_sent_at", { withTimezone: true }),
     createdByUserId: uuid("created_by_user_id").references(() => users.id, {
       onDelete: "set null",
     }),
