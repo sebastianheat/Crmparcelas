@@ -10,6 +10,7 @@ import {
   parcels,
   projectDocuments,
   projects,
+  promesaTemplates,
   sellerCompanies,
   users,
 } from "@/db/schema";
@@ -108,6 +109,14 @@ export function getParcel(id: string) {
 export function listSellerCompanies() {
   return withCurrentTenant((tx) =>
     tx.query.sellerCompanies.findMany({ orderBy: sellerCompanies.razonSocial }),
+  );
+}
+
+export function listPromesaTemplates() {
+  return withCurrentTenant((tx) =>
+    tx.query.promesaTemplates.findMany({
+      orderBy: desc(promesaTemplates.isDefault),
+    }),
   );
 }
 

@@ -19,6 +19,7 @@ import {
   parcels,
   projectDocuments,
   projects,
+  promesaTemplates,
   sellerCompanies,
   users,
   type ParcelEventType,
@@ -26,6 +27,7 @@ import {
 } from "@/db/schema";
 import { generateLandingCopy } from "@/lib/ai/claude";
 import { extractAcquisition } from "@/lib/ai/extract";
+import { DEFAULT_PROMESA_MATRIZ } from "@/lib/promesa-template";
 import { getDteProvider } from "@/lib/dte";
 import { EVENT_TO_STATUS } from "@/lib/labels";
 import { generateReservaPdf, renderDocumentPdf } from "@/lib/pdf";
@@ -631,14 +633,22 @@ export async function generatePromesa(formData: FormData) {
       orderBy: desc(parcelEvents.createdAt),
     });
 
-    const text = await generatePromesaText({
-      project: parcel.project,
-      company: company ?? null,
-      parcel,
-      client: parcel.currentClient,
-      notaria: parcel.project.notaria,
-      pago: (lastMoney?.payload as Record<string, unknown>) ?? null,
+    // Matriz del tenant (la edita el área legal); si no hay, IA libre.
+    const tpl = await tx.query.promesaTemplates.findFirst({
+      where: eq(promesaTemplates.isDefault, true),
     });
+
+    const text = await generatePromesaText(
+      {
+        project: parcel.project,
+        company: company ?? null,
+        parcel,
+        client: parcel.currentClient,
+        notaria: parcel.project.notaria,
+        pago: (lastMoney?.payload as Record<string, unknown>) ?? null,
+      },
+      tpl?.content ?? null,
+    );
 
     const pdf = await renderDocumentPdf(
       `Promesa de compraventa — Parcela ${parcel.code}`,
@@ -739,4 +749,51 @@ export async function uploadProjectDocument(formData: FormData) {
   });
 
   revalidatePath(`/app/proyectos/${projectSlug}`);
+}
+
+// ─── Matrices de promesa (área legal) ─────────────────────────────────────────
+
+export async function loadDefaultPromesaTemplate() {
+  await requirePermission("settings:write");
+  await withCurrentTenant(async (tx, { tenantId }) => {
+    const existing = await tx.query.promesaTemplates.findFirst({
+      where: eq(promesaTemplates.isDefault, true),
+    });
+    if (existing) return;
+    await tx.insert(promesaTemplates).values({
+      tenantId,
+      name: "Matriz por defecto",
+      content: DEFAULT_PROMESA_MATRIZ,
+      isDefault: true,
+    });
+  });
+  revalidatePath("/app/matrices");
+}
+
+export async function savePromesaTemplate(formData: FormData) {
+  await requirePermission("settings:write");
+  const id = String(formData.get("id") || "") || null;
+  const name = String(formData.get("name") || "").trim() || "Matriz";
+  const content = String(formData.get("content") || "").trim();
+  if (content.length < 50) throw new Error("La matriz está vacía o muy corta.");
+
+  await withCurrentTenant(async (tx, { tenantId }) => {
+    if (id) {
+      await tx
+        .update(promesaTemplates)
+        .set({ name, content, updatedAt: new Date() })
+        .where(eq(promesaTemplates.id, id));
+    } else {
+      const existing = await tx.query.promesaTemplates.findFirst({
+        where: eq(promesaTemplates.isDefault, true),
+      });
+      await tx.insert(promesaTemplates).values({
+        tenantId,
+        name,
+        content,
+        isDefault: !existing,
+      });
+    }
+  });
+  revalidatePath("/app/matrices");
 }

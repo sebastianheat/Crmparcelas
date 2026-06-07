@@ -57,6 +57,13 @@
       "when": 1780794962427,
       "tag": "0007_brainy_prowler",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1780796616582,
+      "tag": "0008_tiresome_texas_twister",
+      "breakpoints": true
     }
   ]
 }

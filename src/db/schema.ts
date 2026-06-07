@@ -630,6 +630,28 @@ export const parcelDocuments = pgTable(
   ],
 );
 
+// ─── M2 — Matrices de promesa (editables por el área legal) ───────────────────
+
+export const promesaTemplates = pgTable(
+  "promesa_templates",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    content: text("content").notNull(),
+    isDefault: boolean("is_default").default(false).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [index("promesa_templates_tenant_idx").on(t.tenantId)],
+);
+
 // ─── M9 — Costos (para utilidad por proyecto) ─────────────────────────────────
 
 export const costs = pgTable(
@@ -727,6 +749,7 @@ export type Client = typeof clients.$inferSelect;
 export type SellerCompany = typeof sellerCompanies.$inferSelect;
 export type ParcelDocument = typeof parcelDocuments.$inferSelect;
 export type ProjectDocument = typeof projectDocuments.$inferSelect;
+export type PromesaTemplate = typeof promesaTemplates.$inferSelect;
 export type Acquisition = NonNullable<Project["acquisition"]>;
 
 /** Tablas de negocio sujetas a Row-Level Security por tenant. */
@@ -742,6 +765,7 @@ export const TENANT_SCOPED_TABLES = [
   "costs",
   "parcel_documents",
   "project_documents",
+  "promesa_templates",
 ] as const;
 
 export { sql };
