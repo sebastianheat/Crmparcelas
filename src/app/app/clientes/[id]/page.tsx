@@ -10,6 +10,7 @@ import {
   Select,
 } from "@/components/ui";
 import { CLIENT_DOC_LABELS, CLIENT_DOC_TYPES } from "@/lib/labels";
+import { createPortalToken } from "@/lib/portal";
 import { can } from "@/lib/roles";
 import { requireSession } from "@/lib/session";
 import { deleteClientDocument, uploadClientDocument } from "@/server/actions";
@@ -27,6 +28,8 @@ export default async function ClientFilePage({
   if (!client) notFound();
 
   const present = new Set<string>(client.documents.map((d) => d.type));
+  const portalBase = process.env.APP_URL ?? "https://5000.cl";
+  const portalLink = `${portalBase}/portal/acceso?t=${createPortalToken(session.tenantId, client.id)}`;
 
   return (
     <div className="space-y-6">
@@ -166,6 +169,25 @@ export default async function ClientFilePage({
               ))}
             </dl>
           </Card>
+
+          {canWrite && (
+            <Card>
+              <CardHeader
+                title="Portal del cliente"
+                subtitle="Enlace de acceso para que el cliente vea su parcela, pagos y documentos."
+              />
+              <div className="p-5">
+                <input
+                  readOnly
+                  value={portalLink}
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600"
+                />
+                <p className="mt-2 text-xs text-slate-400">
+                  Cópialo y envíalo por WhatsApp/email. Vence en 30 días.
+                </p>
+              </div>
+            </Card>
+          )}
 
           <Card>
             <CardHeader title={`Parcelas (${client.parcels.length})`} />
