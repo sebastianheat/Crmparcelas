@@ -40,6 +40,7 @@ import { EVENT_TO_STATUS } from "@/lib/labels";
 import { generateReservaPdf, renderDocumentPdf } from "@/lib/pdf";
 import { generatePromesaText } from "@/lib/promesa";
 import { storeFile } from "@/lib/storage";
+import { handleInboundWhatsApp } from "@/lib/whatsapp/agent";
 import { ASSIGNABLE_ROLES } from "@/lib/roles";
 import { withCurrentTenant, requirePermission } from "@/lib/session";
 
@@ -1197,4 +1198,17 @@ export async function convertLeadToClient(formData: FormData) {
       .where(eq(leads.id, id));
   });
   if (clientId) redirect(`/app/clientes`);
+}
+
+// ─── WhatsApp (agente IA) ─────────────────────────────────────────────────────
+
+export async function simulateInboundWhatsApp(formData: FormData) {
+  await requirePermission("reservas:create");
+  const from = String(formData.get("from") || "").trim();
+  const text = String(formData.get("text") || "").trim();
+  if (!from || !text) throw new Error("Indica número y mensaje.");
+  const tenantId = await withCurrentTenant(async (_tx, ctx) => ctx.tenantId);
+  await handleInboundWhatsApp({ tenantId, from, text });
+  revalidatePath("/app/whatsapp");
+  revalidatePath("/app/crm");
 }

@@ -21,6 +21,7 @@ const NAV: { section: string; items: NavItem[] }[] = [
     items: [
       { href: "/app", label: "Dashboard", icon: "▦" },
       { href: "/app/crm", label: "CRM y Embudo", icon: "◔" },
+      { href: "/app/whatsapp", label: "Agente WhatsApp", icon: "◍" },
       { href: "/app/proyectos", label: "Proyectos y Stock", icon: "▤" },
       { href: "/app/clientes", label: "Clientes", icon: "◉" },
       { href: "/app/prefacturacion", label: "Prefacturación", icon: "₿" },
@@ -36,7 +37,6 @@ const NAV: { section: string; items: NavItem[] }[] = [
   {
     section: "Próximamente (Fase 2+)",
     items: [
-      { href: "#", label: "Agente IA WhatsApp", icon: "◍", soon: true },
       { href: "#", label: "Parcelas Contenido", icon: "◎", soon: true },
       { href: "#", label: "Ads", icon: "◈", soon: true },
     ],
@@ -84,7 +84,8 @@ export function AppShell({
                         can(role, "settings:write")) &&
                       (item.href !== "/app/comisiones" ||
                         can(role, "finance:read")) &&
-                      (item.href !== "/app/crm" ||
+                      ((item.href !== "/app/crm" &&
+                        item.href !== "/app/whatsapp") ||
                         can(role, "reservas:create")),
                   )
                   .map((item) => {
