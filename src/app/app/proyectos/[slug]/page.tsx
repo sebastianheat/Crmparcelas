@@ -11,6 +11,7 @@ import {
   Select,
   Textarea,
 } from "@/components/ui";
+import { StockMap } from "@/components/stock-map";
 import { PARCEL_STATUS, PROJECT_STATUS } from "@/lib/labels";
 import { formatPrice } from "@/lib/money";
 import { requireSession } from "@/lib/session";
@@ -137,6 +138,19 @@ export default async function ProjectDetailPage({
           </div>
         </Card>
       </div>
+
+      {/* Mapa de stock */}
+      {project.parcels.length > 0 && (
+        <Card>
+          <CardHeader
+            title="Mapa de stock"
+            subtitle="Vista visual del loteo. Haz clic en una parcela para ver su detalle."
+          />
+          <div className="p-5">
+            <StockMap parcels={project.parcels} hrefBase="/app/parcelas" />
+          </div>
+        </Card>
+      )}
 
       {/* Stock */}
       <Card>

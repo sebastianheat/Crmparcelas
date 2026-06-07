@@ -1,19 +1,8 @@
 import { notFound } from "next/navigation";
-import { PARCEL_STATUS, PROJECT_STATUS } from "@/lib/labels";
+import { StockMap } from "@/components/stock-map";
+import { PROJECT_STATUS } from "@/lib/labels";
 import { formatPrice } from "@/lib/money";
 import { getPublicProject } from "@/server/queries";
-
-// Estado de la parcela → color del mapa de stock (verde=disponible, rojo=vendida).
-const CELL: Record<string, string> = {
-  disponible: "bg-emerald-500 text-white",
-  reservada: "bg-amber-400 text-amber-950",
-  prometida: "bg-amber-500 text-white",
-  escriturada: "bg-red-500 text-white",
-  inscrita: "bg-red-600 text-white",
-  entregada: "bg-red-700 text-white",
-  resciliada: "bg-slate-300 text-slate-700",
-  bloqueada: "bg-slate-400 text-white",
-};
 
 export async function generateMetadata({
   params,
@@ -115,51 +104,10 @@ export default async function PublicProjectPage({
 
         {/* Mapa de stock */}
         <section>
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-xl font-semibold text-slate-900">
-              Mapa de parcelas
-            </h2>
-            <div className="flex items-center gap-3 text-xs text-slate-500">
-              <span className="flex items-center gap-1">
-                <span className="h-3 w-3 rounded bg-emerald-500" /> Disponible
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="h-3 w-3 rounded bg-amber-500" /> Reservada
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="h-3 w-3 rounded bg-red-600" /> Vendida
-              </span>
-            </div>
-          </div>
-          {total === 0 ? (
-            <p className="rounded-xl bg-white p-6 text-sm text-slate-400 shadow-sm">
-              Próximamente publicaremos el detalle de las parcelas.
-            </p>
-          ) : (
-            <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 md:grid-cols-8">
-              {project.parcels.map((p) => {
-                const ps = PARCEL_STATUS[p.status];
-                return (
-                  <div
-                    key={p.id}
-                    title={`${p.code} · ${ps?.label ?? p.status}${
-                      p.areaM2 ? ` · ${p.areaM2} m²` : ""
-                    }`}
-                    className={`flex aspect-square flex-col items-center justify-center rounded-lg text-center text-xs font-semibold ${
-                      CELL[p.status] ?? "bg-slate-200 text-slate-600"
-                    }`}
-                  >
-                    <span>{p.code}</span>
-                    {p.areaM2 && (
-                      <span className="text-[10px] font-normal opacity-90">
-                        {Math.round(Number(p.areaM2))} m²
-                      </span>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          <h2 className="mb-3 text-xl font-semibold text-slate-900">
+            Mapa de parcelas
+          </h2>
+          <StockMap parcels={project.parcels} />
         </section>
 
         {/* CTA */}
