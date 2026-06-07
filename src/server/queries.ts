@@ -286,6 +286,10 @@ export type ProjectFinancials = {
   name: string;
   slug: string;
   status: string;
+  legalStatus: string;
+  riesgo: string;
+  denuncias: number;
+  propio: boolean;
   totalUnits: number;
   freeUnits: number;
   ingresosClp: number; // dinero efectivamente ingresado (comprobantes)
@@ -311,6 +315,10 @@ export function getDashboard() {
         name: p.name,
         slug: p.slug,
         status: p.status,
+        legalStatus: p.legalStatus,
+        riesgo: p.riesgo,
+        denuncias: p.denuncias,
+        propio: p.propio,
         totalUnits: 0,
         freeUnits: 0,
         ingresosClp: 0,
@@ -377,7 +385,12 @@ export function getDashboard() {
 
     return {
       projects: list,
-      totals: { ...totals, margenClp: totals.ingresosClp - totals.costosClp },
+      totals: {
+        ...totals,
+        margenClp: totals.ingresosClp - totals.costosClp,
+        riesgoAlto: list.filter((f) => f.riesgo === "alto").length,
+        denunciasTotal: list.reduce((a, f) => a + f.denuncias, 0),
+      },
       projectCount: allProjects.length,
     };
   });

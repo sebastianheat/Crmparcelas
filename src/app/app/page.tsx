@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Badge, Card, CardHeader, EmptyState, LinkButton, Stat } from "@/components/ui";
-import { PROJECT_STATUS } from "@/lib/labels";
+import { LEGAL_STATUS, PROJECT_STATUS, RIESGO } from "@/lib/labels";
 import { formatClp } from "@/lib/money";
 import { getDashboard } from "@/server/queries";
 
@@ -97,8 +97,19 @@ export default async function DashboardPage() {
                         >
                           {p.name}
                         </Link>
-                        <div className="mt-1">
+                        <div className="mt-1 flex flex-wrap gap-1">
                           <Badge tone={st?.tone}>{st?.label ?? p.status}</Badge>
+                          <Badge tone={LEGAL_STATUS[p.legalStatus]?.tone}>
+                            {LEGAL_STATUS[p.legalStatus]?.label ?? p.legalStatus}
+                          </Badge>
+                          {p.riesgo !== "bajo" && (
+                            <Badge tone={RIESGO[p.riesgo]?.tone}>
+                              {RIESGO[p.riesgo]?.label}
+                            </Badge>
+                          )}
+                          {p.denuncias > 0 && (
+                            <Badge tone="red">{p.denuncias} den.</Badge>
+                          )}
                         </div>
                       </td>
                       <td className="px-5 py-3 text-slate-600">
