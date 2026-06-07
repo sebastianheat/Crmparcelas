@@ -28,7 +28,7 @@ import { getDteProvider } from "@/lib/dte";
 import { EVENT_TO_STATUS } from "@/lib/labels";
 import { generateReservaPdf, renderDocumentPdf } from "@/lib/pdf";
 import { generatePromesaText } from "@/lib/promesa";
-import { uploadBlob } from "@/lib/blob";
+import { storeFile } from "@/lib/storage";
 import { ASSIGNABLE_ROLES } from "@/lib/roles";
 import { withCurrentTenant, requirePermission } from "@/lib/session";
 
@@ -450,13 +450,14 @@ export async function validateVoucher(formData: FormData) {
     );
   }
 
-  // 1) Subir la foto del comprobante a Vercel Blob.
-  const proofUrl = await uploadBlob(
-    `comprobantes/proof-${voucherId}`,
-    proof,
-    proof.type || "image/jpeg",
-  );
+  // 1) Guardar la foto del comprobante (Blob o Postgres).
   const proofBytes = new Uint8Array(await proof.arrayBuffer());
+  const proofUrl = await storeFile({
+    tenantId: session.tenantId,
+    pathname: `comprobantes/proof-${voucherId}`,
+    bytes: proofBytes,
+    contentType: proof.type || "image/jpeg",
+  });
 
   await withTenant(session.tenantId, async (tx) => {
     const sellerUser = alias(users, "seller_user");
@@ -495,11 +496,12 @@ export async function validateVoucher(formData: FormData) {
       },
       { bytes: proofBytes, type: proof.type || "image/jpeg" },
     );
-    const pdfUrl = await uploadBlob(
-      `comprobantes/reserva-${info.voucher.folio}.pdf`,
-      Buffer.from(pdf),
-      "application/pdf",
-    );
+    const pdfUrl = await storeFile({
+      tenantId: session.tenantId,
+      pathname: `comprobantes/reserva-${info.voucher.folio}.pdf`,
+      bytes: pdf,
+      contentType: "application/pdf",
+    });
 
     // 3) Marcar validado.
     await tx
@@ -640,11 +642,12 @@ export async function generatePromesa(formData: FormData) {
       `Promesa de compraventa — Parcela ${parcel.code}`,
       text,
     );
-    const url = await uploadBlob(
-      `promesas/promesa-${parcel.project.slug}-${parcel.code}.pdf`,
-      Buffer.from(pdf),
-      "application/pdf",
-    );
+    const url = await storeFile({
+      tenantId,
+      pathname: `promesas/promesa-${parcel.project.slug}-${parcel.code}.pdf`,
+      bytes: pdf,
+      contentType: "application/pdf",
+    });
 
     await tx.insert(parcelDocuments).values({
       tenantId,

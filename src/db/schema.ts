@@ -12,6 +12,7 @@
 import { relations, sql } from "drizzle-orm";
 import {
   boolean,
+  customType,
   index,
   integer,
   jsonb,
@@ -23,6 +24,13 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+
+/** Tipo binario de Postgres (para guardar archivos cuando no hay Blob externo). */
+const bytea = customType<{ data: Buffer; default: false }>({
+  dataType() {
+    return "bytea";
+  },
+});
 
 // ─── Enums ──────────────────────────────────────────────────────────────────
 
@@ -187,6 +195,27 @@ export const memberships = pgTable(
     uniqueIndex("memberships_user_tenant_uk").on(t.userId, t.tenantId),
     index("memberships_tenant_idx").on(t.tenantId),
   ],
+);
+
+// ─── Archivos (fallback de almacenamiento sin Vercel Blob) ────────────────────
+// Si BLOB_READ_WRITE_TOKEN existe, los archivos van a Vercel Blob; si no, se
+// guardan aquí (bytea) y se sirven por /api/files/[id]. Ver src/lib/storage.ts.
+
+export const blobs = pgTable(
+  "blobs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    filename: text("filename"),
+    mime: text("mime").notNull(),
+    data: bytea("data").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [index("blobs_tenant_idx").on(t.tenantId)],
 );
 
 // ─── Clientes / Leads (mínimo en Fase 1; CRM completo = Fase 2) ────────────────
@@ -658,6 +687,7 @@ export type ParcelDocument = typeof parcelDocuments.$inferSelect;
 
 /** Tablas de negocio sujetas a Row-Level Security por tenant. */
 export const TENANT_SCOPED_TABLES = [
+  "blobs",
   "clients",
   "seller_companies",
   "projects",
