@@ -1,16 +1,9 @@
 import { and, eq, inArray, isNull, lte } from "drizzle-orm";
 import { clients, installments, leadActivities, leads, parcels } from "@/db/schema";
 import { withTenant } from "@/db/tenant";
+import { LEAD_ACTIVE_STAGES } from "@/lib/labels";
 import { formatClp } from "@/lib/money";
 import { getWhatsAppProvider } from "@/lib/whatsapp";
-
-const ACTIVE_STAGES = [
-  "nuevo",
-  "contactado",
-  "calificado",
-  "visita",
-  "negociacion",
-] as const;
 
 const DAY = 86_400_000;
 
@@ -76,7 +69,7 @@ export async function runRemindersForTenant(
     const activos = await tx
       .select()
       .from(leads)
-      .where(inArray(leads.stage, [...ACTIVE_STAGES]));
+      .where(inArray(leads.stage, [...LEAD_ACTIVE_STAGES]));
 
     let leadsCount = 0;
     for (const l of activos) {

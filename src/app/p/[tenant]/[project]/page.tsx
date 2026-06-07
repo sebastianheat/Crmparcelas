@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { StockMap } from "@/components/stock-map";
 import { PROJECT_STATUS } from "@/lib/labels";
 import { formatPrice } from "@/lib/money";
+import { captureWebLead } from "@/server/actions";
 import { getPublicProject } from "@/server/queries";
 
 export async function generateMetadata({
@@ -17,8 +18,11 @@ export async function generateMetadata({
 
 export default async function PublicProjectPage({
   params,
+  searchParams,
 }: PageProps<"/p/[tenant]/[project]">) {
   const { tenant: tenantSlug, project: projectSlug } = await params;
+  const sp = await searchParams;
+  const sent = sp?.ok === "1";
   const data = await getPublicProject(tenantSlug, projectSlug);
   if (!data) notFound();
 
@@ -110,15 +114,68 @@ export default async function PublicProjectPage({
           <StockMap parcels={project.parcels} />
         </section>
 
-        {/* CTA */}
-        <section className="rounded-2xl bg-white p-6 text-center shadow-sm">
+        {/* CTA / captura de lead */}
+        <section className="rounded-2xl bg-white p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-slate-900">
             ¿Te interesa una parcela?
           </h2>
           <p className="mt-1 text-sm text-slate-500">
-            Contáctanos para agendar una visita a terreno.
+            Déjanos tus datos y te contactamos para agendar una visita.
           </p>
-          <p className="mt-4 text-sm text-slate-400">{tenant.name}</p>
+
+          {sent ? (
+            <div className="mt-4 rounded-xl bg-brand-50 p-4 text-sm font-medium text-brand-700">
+              ¡Gracias! Recibimos tu consulta y te contactaremos pronto. 🌿
+            </div>
+          ) : (
+            <form
+              action={captureWebLead}
+              className="mt-4 grid gap-3 sm:grid-cols-2"
+            >
+              <input type="hidden" name="tenantId" value={tenant.id} />
+              <input type="hidden" name="tenantSlug" value={tenantSlug} />
+              <input type="hidden" name="projectSlug" value={projectSlug} />
+              <input type="hidden" name="projectId" value={project.id} />
+              {/* honeypot */}
+              <input
+                type="text"
+                name="website"
+                tabIndex={-1}
+                autoComplete="off"
+                className="hidden"
+              />
+              <input
+                name="name"
+                required
+                placeholder="Nombre"
+                className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              />
+              <input
+                name="phone"
+                placeholder="Teléfono / WhatsApp"
+                className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              />
+              <input
+                name="email"
+                type="email"
+                placeholder="Email"
+                className="rounded-lg border border-slate-200 px-3 py-2 text-sm sm:col-span-2"
+              />
+              <textarea
+                name="message"
+                rows={2}
+                placeholder="¿Qué buscas? (opcional)"
+                className="rounded-lg border border-slate-200 px-3 py-2 text-sm sm:col-span-2"
+              />
+              <button
+                className="rounded-lg px-4 py-2.5 text-sm font-semibold text-white sm:col-span-2"
+                style={{ backgroundColor: brand }}
+              >
+                Quiero más información
+              </button>
+            </form>
+          )}
+          <p className="mt-4 text-center text-xs text-slate-400">{tenant.name}</p>
         </section>
       </div>
 

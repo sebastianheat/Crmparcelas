@@ -1103,14 +1103,7 @@ export async function createLead(formData: FormData) {
 export async function updateLeadStage(formData: FormData) {
   await requirePermission("reservas:create");
   const id = String(formData.get("id"));
-  const stage = String(formData.get("stage")) as
-    | "nuevo"
-    | "contactado"
-    | "calificado"
-    | "visita"
-    | "negociacion"
-    | "ganado"
-    | "perdido";
+  const stage = String(formData.get("stage"));
   const lostReason = String(formData.get("lostReason") || "").trim() || null;
   await withCurrentTenant(async (tx, { tenantId, userId }) => {
     await tx
@@ -1371,4 +1364,45 @@ export async function runRemindersNow() {
   await runRemindersForTenant(tenantId);
   revalidatePath("/app/recordatorios");
   revalidatePath("/app/cobranza");
+}
+
+// ─── Captura de leads desde la web pública (sin sesión) ───────────────────────
+
+export async function captureWebLead(formData: FormData) {
+  // Honeypot anti-bots.
+  if (String(formData.get("website") || "")) redirect("/");
+  const tenantId = String(formData.get("tenantId") || "");
+  const tenantSlug = String(formData.get("tenantSlug") || "");
+  const projectSlug = String(formData.get("projectSlug") || "");
+  const projectId = String(formData.get("projectId") || "") || null;
+  const name = String(formData.get("name") || "").trim();
+  const phone = String(formData.get("phone") || "").trim() || null;
+  const email = String(formData.get("email") || "").trim() || null;
+  const message = String(formData.get("message") || "").trim() || null;
+  if (!tenantId || name.length < 2) redirect(`/p/${tenantSlug}/${projectSlug}?err=1`);
+
+  await withTenant(tenantId, async (tx) => {
+    const [lead] = await tx
+      .insert(leads)
+      .values({
+        tenantId,
+        name,
+        phone,
+        email,
+        source: "web",
+        stage: "entrada",
+        projectId,
+        notes: message,
+      })
+      .returning({ id: leads.id });
+    if (message) {
+      await tx.insert(leadActivities).values({
+        tenantId,
+        leadId: lead.id,
+        type: "nota",
+        note: `Consulta web: ${message}`,
+      });
+    }
+  });
+  redirect(`/p/${tenantSlug}/${projectSlug}?ok=1`);
 }

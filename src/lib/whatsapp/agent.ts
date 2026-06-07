@@ -43,7 +43,7 @@ export async function handleInboundWhatsApp(params: {
           name: `WhatsApp ${from}`,
           phone: from,
           source: "whatsapp",
-          stage: "nuevo",
+          stage: "entrada",
         })
         .returning();
       lead = inserted;

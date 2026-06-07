@@ -24,6 +24,7 @@ import {
 import { db } from "@/db/client";
 import { tenants } from "@/db/schema";
 import { withTenant } from "@/db/tenant";
+import { LEAD_ACTIVE_STAGES, LEAD_WON_STAGES } from "@/lib/labels";
 import { toNumber } from "@/lib/money";
 import { SELLER_ROLES } from "@/lib/roles";
 import { withCurrentTenant } from "@/lib/session";
@@ -43,6 +44,7 @@ export async function getPublicProject(tenantSlug: string, projectSlug: string) 
     if (!project) return null;
     return {
       tenant: {
+        id: tenant.id,
         name: tenant.name,
         brandPrimary: tenant.brandPrimary,
         brandSecondary: tenant.brandSecondary,
@@ -173,15 +175,7 @@ export function getRemindersPreview() {
         createdAt: leads.createdAt,
       })
       .from(leads)
-      .where(
-        inArray(leads.stage, [
-          "nuevo",
-          "contactado",
-          "calificado",
-          "visita",
-          "negociacion",
-        ]),
-      );
+      .where(inArray(leads.stage, [...LEAD_ACTIVE_STAGES]));
     const leadsStale = activos.filter(
       (l) => now - (l.lastContactAt ?? l.createdAt).getTime() > 3 * 86_400_000,
     ).length;
@@ -384,17 +378,19 @@ export function listLeads() {
       .leftJoin(projects, eq(leads.projectId, projects.id))
       .orderBy(desc(leads.updatedAt));
 
+    const won = new Set(LEAD_WON_STAGES);
     const stageCounts: Record<string, number> = {};
     let activos = 0;
+    let ganados = 0;
     let pipelineValue = 0;
     for (const r of rows) {
       stageCounts[r.lead.stage] = (stageCounts[r.lead.stage] ?? 0) + 1;
-      if (r.lead.stage !== "ganado" && r.lead.stage !== "perdido") {
+      if (won.has(r.lead.stage)) ganados += 1;
+      else if (r.lead.stage !== "perdido") {
         activos += 1;
         pipelineValue += toNumber(r.lead.estimatedValueClp) ?? 0;
       }
     }
-    const ganados = stageCounts["ganado"] ?? 0;
     const cerrados = ganados + (stageCounts["perdido"] ?? 0);
     const conversion = cerrados > 0 ? Math.round((ganados / cerrados) * 100) : 0;
     return {

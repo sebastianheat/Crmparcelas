@@ -752,16 +752,8 @@ export const promesaTemplates = pgTable(
 
 // ─── Fase 2 — CRM: leads y embudo de ventas ──────────────────────────────────
 
-export const leadStageEnum = pgEnum("lead_stage", [
-  "nuevo",
-  "contactado",
-  "calificado",
-  "visita",
-  "negociacion",
-  "ganado",
-  "perdido",
-]);
-
+// Etapa del embudo: texto libre (catálogo en src/lib/labels.ts LEAD_STAGES),
+// replicando el embudo real de Toscana (13 etapas de ventas + perdido).
 export const leadSourceEnum = pgEnum("lead_source", [
   "web",
   "whatsapp",
@@ -792,7 +784,7 @@ export const leads = pgTable(
     phone: text("phone"),
     email: text("email"),
     source: leadSourceEnum("source").default("web").notNull(),
-    stage: leadStageEnum("stage").default("nuevo").notNull(),
+    stage: text("stage").default("entrada").notNull(),
     projectId: uuid("project_id").references(() => projects.id, {
       onDelete: "set null",
     }),

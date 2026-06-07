@@ -81,27 +81,50 @@ export const RIESGO: Record<
   alto: { label: "Riesgo alto", tone: "red" },
 };
 
-// Embudo de ventas (orden = avance en el pipeline).
+// Embudo de ventas — réplica del embudo real de Toscana (13 etapas + perdido).
+// Orden = avance en el pipeline.
 export const LEAD_STAGES = [
-  "nuevo",
-  "contactado",
-  "calificado",
-  "visita",
-  "negociacion",
-  "ganado",
+  "entrada",
+  "no_contesta_1",
+  "no_contesta_2",
+  "no_contesta_3",
+  "hablando_ia",
+  "en_conversacion",
+  "reinsistencia",
+  "reunion",
+  "visita_agendada",
+  "visita_cancelada",
+  "visita_concretada",
+  "reservas",
+  "promesando",
   "perdido",
 ] as const;
+
+// Etapas que cuentan como "ganado" para conversión.
+export const LEAD_WON_STAGES = ["reservas", "promesando"];
+
+// Etapas activas (en el embudo, ni ganadas ni perdidas).
+export const LEAD_ACTIVE_STAGES = LEAD_STAGES.filter(
+  (s) => s !== "perdido" && !["reservas", "promesando"].includes(s),
+);
 
 export const LEAD_STAGE: Record<
   string,
   { label: string; tone: "slate" | "blue" | "amber" | "green" | "red" }
 > = {
-  nuevo: { label: "Nuevo", tone: "slate" },
-  contactado: { label: "Contactado", tone: "blue" },
-  calificado: { label: "Calificado", tone: "blue" },
-  visita: { label: "Visita", tone: "amber" },
-  negociacion: { label: "Negociación", tone: "amber" },
-  ganado: { label: "Ganado", tone: "green" },
+  entrada: { label: "Entrada", tone: "slate" },
+  no_contesta_1: { label: "No contesta I", tone: "slate" },
+  no_contesta_2: { label: "No contesta II", tone: "slate" },
+  no_contesta_3: { label: "No contesta III", tone: "slate" },
+  hablando_ia: { label: "Hablando con la IA", tone: "blue" },
+  en_conversacion: { label: "En conversación", tone: "blue" },
+  reinsistencia: { label: "Re-insistencia", tone: "amber" },
+  reunion: { label: "Reunión", tone: "amber" },
+  visita_agendada: { label: "Visita agendada", tone: "amber" },
+  visita_cancelada: { label: "Visita cancelada", tone: "red" },
+  visita_concretada: { label: "Visita concretada", tone: "green" },
+  reservas: { label: "Reserva", tone: "green" },
+  promesando: { label: "Promesando", tone: "green" },
   perdido: { label: "Perdido", tone: "red" },
 };
 

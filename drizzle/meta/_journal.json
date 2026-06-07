@@ -120,6 +120,13 @@
       "when": 1780845165232,
       "tag": "0016_giant_big_bertha",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1780858146362,
+      "tag": "0017_faulty_anita_blake",
+      "breakpoints": true
     }
   ]
 }
