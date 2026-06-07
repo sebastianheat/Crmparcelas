@@ -850,6 +850,49 @@ export const leadActivities = pgTable(
   ],
 );
 
+// ─── M3 — Conciliación bancaria (open banking: Fintoc) ────────────────────────
+
+export const bankMovementStatusEnum = pgEnum("bank_movement_status", [
+  "pendiente",
+  "conciliado",
+  "ignorado",
+]);
+
+export const bankMovements = pgTable(
+  "bank_movements",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    provider: text("provider").notNull().default("mock"),
+    externalId: text("external_id").notNull(), // id del movimiento en el banco
+    postedAt: timestamp("posted_at", { withTimezone: true }).notNull(),
+    // CLP con signo: positivo = abono (entra), negativo = cargo (sale).
+    amountClp: numeric("amount_clp", { precision: 14, scale: 2 }).notNull(),
+    description: text("description"),
+    counterparty: text("counterparty"), // nombre/RUT del remitente
+    status: bankMovementStatusEnum("status").default("pendiente").notNull(),
+    matchedVoucherId: uuid("matched_voucher_id").references(
+      () => moneyVouchers.id,
+      { onDelete: "set null" },
+    ),
+    raw: jsonb("raw").$type<Record<string, unknown>>().default({}),
+    reconciledByUserId: uuid("reconciled_by_user_id").references(
+      () => users.id,
+      { onDelete: "set null" },
+    ),
+    reconciledAt: timestamp("reconciled_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    index("bank_movements_tenant_idx").on(t.tenantId),
+    uniqueIndex("bank_movements_external_uk").on(t.tenantId, t.externalId),
+  ],
+);
+
 // ─── M2 — Causas legales (querellas / denuncias por parcela o cliente) ────────
 
 export const legalCaseTypeEnum = pgEnum("legal_case_type", [
@@ -1012,6 +1055,7 @@ export type PromesaTemplate = typeof promesaTemplates.$inferSelect;
 export type PaymentPlan = typeof paymentPlans.$inferSelect;
 export type Installment = typeof installments.$inferSelect;
 export type LegalCase = typeof legalCases.$inferSelect;
+export type BankMovement = typeof bankMovements.$inferSelect;
 export type Lead = typeof leads.$inferSelect;
 export type LeadActivity = typeof leadActivities.$inferSelect;
 export type Acquisition = NonNullable<Project["acquisition"]>;
@@ -1035,6 +1079,7 @@ export const TENANT_SCOPED_TABLES = [
   "legal_cases",
   "leads",
   "lead_activities",
+  "bank_movements",
 ] as const;
 
 export { sql };

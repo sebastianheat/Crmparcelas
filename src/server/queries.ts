@@ -2,6 +2,7 @@ import { desc, eq, sum } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import {
   clients,
+  bankMovements,
   costs,
   installments,
   leadActivities,
@@ -304,6 +305,51 @@ export function getLead(id: string) {
       .where(eq(leadActivities.leadId, id))
       .orderBy(desc(leadActivities.createdAt));
     return { ...row, activities };
+  });
+}
+
+export function getConciliacion() {
+  return withCurrentTenant(async (tx) => {
+    const voucher = {
+      id: moneyVouchers.id,
+      folio: moneyVouchers.folio,
+      concept: moneyVouchers.concept,
+      amountClp: moneyVouchers.amountClp,
+    };
+    const rows = await tx
+      .select({
+        mv: bankMovements,
+        voucherFolio: moneyVouchers.folio,
+        voucherConcept: moneyVouchers.concept,
+      })
+      .from(bankMovements)
+      .leftJoin(moneyVouchers, eq(bankMovements.matchedVoucherId, moneyVouchers.id))
+      .orderBy(desc(bankMovements.postedAt));
+
+    // Comprobantes disponibles para casar manualmente.
+    const vouchers = await tx
+      .select(voucher)
+      .from(moneyVouchers)
+      .orderBy(desc(moneyVouchers.folio));
+
+    const n = (v: string | number | null) => toNumber(v) ?? 0;
+    let conciliado = 0;
+    let pendiente = 0;
+    let abonos = 0;
+    for (const r of rows) {
+      const amt = n(r.mv.amountClp);
+      if (amt > 0) abonos += amt;
+      if (r.mv.status === "conciliado") conciliado += amt;
+      else if (r.mv.status === "pendiente" && amt > 0) pendiente += amt;
+    }
+    const provider = process.env.BANK_PROVIDER ?? "mock";
+    return {
+      rows,
+      vouchers,
+      provider,
+      connected: provider !== "mock",
+      totals: { conciliado, pendiente, abonos },
+    };
   });
 }
 

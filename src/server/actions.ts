@@ -9,6 +9,7 @@ import { z } from "zod";
 import { db } from "@/db/client";
 import { withTenant } from "@/db/tenant";
 import {
+  bankMovements,
   clients,
   costs,
   installments,
@@ -40,6 +41,7 @@ import { EVENT_TO_STATUS } from "@/lib/labels";
 import { generateReservaPdf, renderDocumentPdf } from "@/lib/pdf";
 import { generatePromesaText } from "@/lib/promesa";
 import { storeFile } from "@/lib/storage";
+import { getBankProvider } from "@/lib/bank";
 import { handleInboundWhatsApp } from "@/lib/whatsapp/agent";
 import { ASSIGNABLE_ROLES } from "@/lib/roles";
 import { withCurrentTenant, requirePermission } from "@/lib/session";
@@ -1211,4 +1213,103 @@ export async function simulateInboundWhatsApp(formData: FormData) {
   await handleInboundWhatsApp({ tenantId, from, text });
   revalidatePath("/app/whatsapp");
   revalidatePath("/app/crm");
+}
+
+// ─── Conciliación bancaria (Fintoc / open banking) ────────────────────────────
+
+export async function syncBankMovements() {
+  await requirePermission("finance:write");
+  await withCurrentTenant(async (tx, { tenantId }) => {
+    const provider = getBankProvider();
+
+    // Sincronización incremental: desde el último movimiento registrado.
+    const last = await tx.query.bankMovements.findFirst({
+      orderBy: desc(bankMovements.postedAt),
+      columns: { postedAt: true },
+    });
+    const since = last ? new Date(last.postedAt) : undefined;
+
+    const movements = await provider.listMovements({ since });
+    for (const m of movements) {
+      await tx
+        .insert(bankMovements)
+        .values({
+          tenantId,
+          provider: provider.name,
+          externalId: m.externalId,
+          postedAt: m.postedAt,
+          amountClp: String(m.amountClp),
+          description: m.description ?? null,
+          counterparty: m.counterparty ?? null,
+          raw: m.raw ?? {},
+        })
+        .onConflictDoNothing({
+          target: [bankMovements.tenantId, bankMovements.externalId],
+        });
+    }
+
+    // Casado automático: abonos pendientes contra comprobantes por monto exacto.
+    const pendientes = await tx.query.bankMovements.findMany({
+      where: eq(bankMovements.status, "pendiente"),
+    });
+    const vouchers = await tx.query.moneyVouchers.findMany({
+      columns: { id: true, amountClp: true },
+    });
+    const alreadyMatched = new Set(
+      (
+        await tx.query.bankMovements.findMany({
+          columns: { matchedVoucherId: true },
+        })
+      )
+        .map((b) => b.matchedVoucherId)
+        .filter(Boolean) as string[],
+    );
+
+    for (const mv of pendientes) {
+      const amount = Number(mv.amountClp);
+      if (amount <= 0) continue; // solo abonos
+      const candidates = vouchers.filter(
+        (v) => Number(v.amountClp) === amount && !alreadyMatched.has(v.id),
+      );
+      if (candidates.length === 1) {
+        const vid = candidates[0].id;
+        await tx
+          .update(bankMovements)
+          .set({ status: "conciliado", matchedVoucherId: vid, reconciledAt: new Date() })
+          .where(eq(bankMovements.id, mv.id));
+        alreadyMatched.add(vid);
+      }
+    }
+  });
+  revalidatePath("/app/conciliacion");
+}
+
+export async function reconcileMovement(formData: FormData) {
+  await requirePermission("finance:write");
+  const id = String(formData.get("id"));
+  const voucherId = String(formData.get("voucherId") || "") || null;
+  await withCurrentTenant(async (tx, { userId }) => {
+    await tx
+      .update(bankMovements)
+      .set({
+        status: voucherId ? "conciliado" : "pendiente",
+        matchedVoucherId: voucherId,
+        reconciledByUserId: userId,
+        reconciledAt: new Date(),
+      })
+      .where(eq(bankMovements.id, id));
+  });
+  revalidatePath("/app/conciliacion");
+}
+
+export async function ignoreMovement(formData: FormData) {
+  await requirePermission("finance:write");
+  const id = String(formData.get("id"));
+  await withCurrentTenant(async (tx) => {
+    await tx
+      .update(bankMovements)
+      .set({ status: "ignorado", matchedVoucherId: null })
+      .where(eq(bankMovements.id, id));
+  });
+  revalidatePath("/app/conciliacion");
 }
