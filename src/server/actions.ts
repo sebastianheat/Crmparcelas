@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { hash } from "bcryptjs";
-import { desc, eq, max } from "drizzle-orm";
+import { and, desc, eq, isNotNull, max } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
 import { db } from "@/db/client";
@@ -951,6 +951,16 @@ export async function markInstallmentPaid(formData: FormData) {
     });
     if (!parcel) throw new Error("Parcela no encontrada.");
 
+    // Vendedor responsable (de la reserva/venta) para atribuir la comisión.
+    const sale = await tx.query.parcelEvents.findFirst({
+      where: and(
+        eq(parcelEvents.parcelId, inst.parcelId),
+        isNotNull(parcelEvents.sellerUserId),
+      ),
+      orderBy: desc(parcelEvents.createdAt),
+      columns: { sellerUserId: true },
+    });
+
     // Comprobante de dinero por la cuota (entra a prefacturación).
     const [{ value: lastFolio }] = await tx
       .select({ value: max(moneyVouchers.folio) })
@@ -964,6 +974,7 @@ export async function markInstallmentPaid(formData: FormData) {
         folio: (lastFolio ?? 0) + 1,
         concept: `Cuota ${inst.number} parcela ${parcel.code}`,
         amountClp: inst.amountClp,
+        sellerUserId: sale?.sellerUserId ?? null,
         createdByUserId: userId,
       })
       .returning();
@@ -1033,4 +1044,19 @@ export async function updateLegalCaseStatus(formData: FormData) {
       .where(eq(legalCases.id, id));
   });
   revalidatePath("/app/legal");
+}
+
+// ─── Comisiones de vendedores (M8) ────────────────────────────────────────────
+
+export async function setCommissionPct(formData: FormData) {
+  await requirePermission("finance:write");
+  const userId = String(formData.get("userId"));
+  const pct = num(formData.get("commissionPct")); // puede ser null (sin comisión)
+  await withCurrentTenant(async (tx) => {
+    await tx
+      .update(memberships)
+      .set({ commissionPct: pct })
+      .where(eq(memberships.userId, userId));
+  });
+  revalidatePath("/app/comisiones");
 }

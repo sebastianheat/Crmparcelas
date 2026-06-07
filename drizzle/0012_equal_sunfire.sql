@@ -1,0 +1,1 @@
+ALTER TABLE "memberships" ADD COLUMN "commission_pct" numeric(5, 2);

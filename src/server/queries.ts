@@ -1,4 +1,4 @@
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, sum } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import {
   clients,
@@ -177,6 +177,60 @@ export function listSellerCompanies() {
   return withCurrentTenant((tx) =>
     tx.query.sellerCompanies.findMany({ orderBy: sellerCompanies.razonSocial }),
   );
+}
+
+export function getCommissions() {
+  return withCurrentTenant(async (tx) => {
+    const mems = await tx
+      .select({
+        userId: memberships.userId,
+        role: memberships.role,
+        pct: memberships.commissionPct,
+        name: users.name,
+        email: users.email,
+      })
+      .from(memberships)
+      .innerJoin(users, eq(memberships.userId, users.id));
+
+    // Cobros (comprobantes de dinero) atribuidos a cada vendedor.
+    const cobrosRows = await tx
+      .select({
+        sellerUserId: moneyVouchers.sellerUserId,
+        total: sum(moneyVouchers.amountClp),
+      })
+      .from(moneyVouchers)
+      .groupBy(moneyVouchers.sellerUserId);
+    const cobrosBySeller = new Map<string, number>();
+    for (const r of cobrosRows) {
+      if (r.sellerUserId) cobrosBySeller.set(r.sellerUserId, toNumber(r.total) ?? 0);
+    }
+
+    const rows = mems
+      .map((m) => {
+        const cobros = cobrosBySeller.get(m.userId) ?? 0;
+        const pct = toNumber(m.pct) ?? 0;
+        return {
+          userId: m.userId,
+          name: m.name ?? m.email,
+          role: m.role,
+          pct,
+          cobros,
+          comision: Math.round((cobros * pct) / 100),
+        };
+      })
+      // Mostrar vendedores y/o quienes tengan cobros o tasa configurada.
+      .filter((r) => r.role === "vendedor" || r.cobros > 0 || r.pct > 0)
+      .sort((a, b) => b.comision - a.comision);
+
+    const totals = rows.reduce(
+      (a, r) => ({
+        cobros: a.cobros + r.cobros,
+        comision: a.comision + r.comision,
+      }),
+      { cobros: 0, comision: 0 },
+    );
+    return { rows, totals };
+  });
 }
 
 export function listLegalCases() {

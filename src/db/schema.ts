@@ -198,6 +198,8 @@ export const memberships = pgTable(
       .notNull()
       .references(() => tenants.id, { onDelete: "cascade" }),
     role: roleEnum("role").notNull(),
+    // Tasa de comisión del vendedor (%) sobre cobros atribuidos (M8).
+    commissionPct: numeric("commission_pct", { precision: 5, scale: 2 }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
