@@ -3,11 +3,13 @@ import { alias } from "drizzle-orm/pg-core";
 import {
   clients,
   costs,
+  installments,
   memberships,
   moneyVouchers,
   parcelDocuments,
   parcelEvents,
   parcels,
+  paymentPlans,
   projectDocuments,
   projects,
   promesaTemplates,
@@ -102,7 +104,71 @@ export function getParcel(id: string) {
       .from(parcelDocuments)
       .where(eq(parcelDocuments.parcelId, id))
       .orderBy(desc(parcelDocuments.createdAt));
-    return { ...parcel, documents };
+    const plan = await tx.query.paymentPlans.findFirst({
+      where: eq(paymentPlans.parcelId, id),
+      orderBy: desc(paymentPlans.createdAt),
+    });
+    const rawInstallments = plan
+      ? await tx
+          .select()
+          .from(installments)
+          .where(eq(installments.planId, plan.id))
+          .orderBy(installments.number)
+      : [];
+    const now = Date.now();
+    const planInstallments = rawInstallments.map((c) => ({
+      ...c,
+      overdue:
+        c.status === "pendiente" && new Date(c.dueDate).getTime() < now,
+    }));
+    return { ...parcel, documents, plan: plan ?? null, installments: planInstallments };
+  });
+}
+
+// ─── Cobranza (dashboard de cuotas) ───────────────────────────────────────────
+
+export function getCobranza() {
+  return withCurrentTenant(async (tx) => {
+    const rows = await tx
+      .select({
+        inst: installments,
+        parcelCode: parcels.code,
+        projectName: projects.name,
+        clientName: clients.name,
+      })
+      .from(installments)
+      .leftJoin(parcels, eq(installments.parcelId, parcels.id))
+      .leftJoin(projects, eq(parcels.projectId, projects.id))
+      .leftJoin(clients, eq(parcels.currentClientId, clients.id))
+      .orderBy(installments.dueDate);
+
+    const now = Date.now();
+    const n = (v: string | number | null) => toNumber(v) ?? 0;
+    let recaudado = 0;
+    let pendiente = 0;
+    let vencido = 0;
+    const vencidas: typeof rows = [];
+    const proximas: typeof rows = [];
+    for (const r of rows) {
+      if (r.inst.status === "pagada") {
+        recaudado += n(r.inst.amountClp);
+        continue;
+      }
+      if (r.inst.status === "condonada") continue;
+      pendiente += n(r.inst.amountClp);
+      const due = new Date(r.inst.dueDate).getTime();
+      if (due < now) {
+        vencido += n(r.inst.amountClp);
+        vencidas.push(r);
+      } else {
+        proximas.push(r);
+      }
+    }
+    return {
+      totals: { recaudado, pendiente, vencido },
+      vencidas,
+      proximas: proximas.slice(0, 50),
+    };
   });
 }
 

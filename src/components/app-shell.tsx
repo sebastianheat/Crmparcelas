@@ -23,6 +23,7 @@ const NAV: { section: string; items: NavItem[] }[] = [
       { href: "/app/proyectos", label: "Proyectos y Stock", icon: "▤" },
       { href: "/app/clientes", label: "Clientes", icon: "◉" },
       { href: "/app/prefacturacion", label: "Prefacturación", icon: "₿" },
+      { href: "/app/cobranza", label: "Cobranza", icon: "◷" },
       { href: "/app/costos", label: "Costos", icon: "▸" },
       { href: "/app/sociedades", label: "Sociedades", icon: "⬢" },
       { href: "/app/matrices", label: "Matrices legales", icon: "▦" },

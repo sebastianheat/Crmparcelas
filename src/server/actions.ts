@@ -11,12 +11,14 @@ import { withTenant } from "@/db/tenant";
 import {
   clients,
   costs,
+  installments,
   invoices,
   memberships,
   moneyVouchers,
   parcelDocuments,
   parcelEvents,
   parcels,
+  paymentPlans,
   projectDocuments,
   projects,
   promesaTemplates,
@@ -29,6 +31,8 @@ import { generateLandingCopy } from "@/lib/ai/claude";
 import { extractAcquisition } from "@/lib/ai/extract";
 import { DEFAULT_PROMESA_MATRIZ } from "@/lib/promesa-template";
 import { getDteProvider } from "@/lib/dte";
+import { renderDocumentDocx } from "@/lib/docx";
+import { getSignatureProvider } from "@/lib/signature";
 import { EVENT_TO_STATUS } from "@/lib/labels";
 import { generateReservaPdf, renderDocumentPdf } from "@/lib/pdf";
 import { generatePromesaText } from "@/lib/promesa";
@@ -661,6 +665,19 @@ export async function generatePromesa(formData: FormData) {
       contentType: "application/pdf",
     });
 
+    // Export Word (.docx) editable.
+    const docx = await renderDocumentDocx(
+      `Promesa de compraventa — Parcela ${parcel.code}`,
+      text,
+    );
+    const docxUrl = await storeFile({
+      tenantId,
+      pathname: `promesas/promesa-${parcel.project.slug}-${parcel.code}.docx`,
+      bytes: docx,
+      contentType:
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    });
+
     await tx.insert(parcelDocuments).values({
       tenantId,
       parcelId,
@@ -668,6 +685,7 @@ export async function generatePromesa(formData: FormData) {
       type: "promesa",
       title: `Promesa de compraventa — ${parcel.currentClient.name}`,
       url,
+      docxUrl,
       status: "borrador",
       generatedByAi: Boolean(process.env.ANTHROPIC_API_KEY),
       createdByUserId: userId,
@@ -796,4 +814,152 @@ export async function savePromesaTemplate(formData: FormData) {
     }
   });
   revalidatePath("/app/matrices");
+}
+
+// ─── Firma electrónica (M2) ───────────────────────────────────────────────────
+
+export async function sendToSignature(formData: FormData) {
+  await requirePermission("events:write");
+  const documentId = String(formData.get("documentId"));
+  let parcelId = "";
+  await withCurrentTenant(async (tx) => {
+    const doc = await tx.query.parcelDocuments.findFirst({
+      where: eq(parcelDocuments.id, documentId),
+    });
+    if (!doc) throw new Error("Documento no encontrado.");
+    parcelId = doc.parcelId;
+    const provider = getSignatureProvider();
+    const res = await provider.send({
+      documentUrl: doc.url,
+      title: doc.title,
+      signers: [],
+    });
+    await tx
+      .update(parcelDocuments)
+      .set({
+        signatureProvider: res.provider,
+        signatureRef: res.ref,
+        signatureStatus: res.status,
+        status: "en_firma",
+      })
+      .where(eq(parcelDocuments.id, documentId));
+  });
+  if (parcelId) revalidatePath(`/app/parcelas/${parcelId}`);
+}
+
+export async function markDocumentSigned(formData: FormData) {
+  await requirePermission("events:write");
+  const documentId = String(formData.get("documentId"));
+  let parcelId = "";
+  await withCurrentTenant(async (tx) => {
+    const [doc] = await tx
+      .update(parcelDocuments)
+      .set({ signatureStatus: "firmado", status: "firmado", signedAt: new Date() })
+      .where(eq(parcelDocuments.id, documentId))
+      .returning({ parcelId: parcelDocuments.parcelId });
+    parcelId = doc?.parcelId ?? "";
+  });
+  if (parcelId) revalidatePath(`/app/parcelas/${parcelId}`);
+}
+
+// ─── Cobranza / plan de pagos (crédito directo) ───────────────────────────────
+
+function addMonths(date: Date, months: number): Date {
+  const d = new Date(date);
+  d.setMonth(d.getMonth() + months);
+  return d;
+}
+
+export async function createPaymentPlan(formData: FormData) {
+  await requirePermission("events:write");
+  const parcelId = String(formData.get("parcelId"));
+  const total = num(formData.get("totalClp"));
+  const pie = num(formData.get("pieClp")) ?? "0";
+  const nCuotas = Math.min(
+    Math.max(parseInt(String(formData.get("nCuotas") || "1"), 10) || 1, 1),
+    240,
+  );
+  const firstDueRaw = String(formData.get("firstDueDate") || "");
+  if (!total) throw new Error("Indica el precio total.");
+  const firstDue = firstDueRaw ? new Date(firstDueRaw) : addMonths(new Date(), 1);
+  const saldo = Number(total) - Number(pie);
+  const cuota = Math.round(saldo / nCuotas);
+
+  await withCurrentTenant(async (tx, { tenantId, userId }) => {
+    const parcel = await tx.query.parcels.findFirst({
+      where: eq(parcels.id, parcelId),
+    });
+    if (!parcel) throw new Error("Parcela no encontrada.");
+
+    const [plan] = await tx
+      .insert(paymentPlans)
+      .values({
+        tenantId,
+        parcelId,
+        projectId: parcel.projectId,
+        clientId: parcel.currentClientId,
+        totalClp: total,
+        pieClp: pie,
+        nCuotas,
+        createdByUserId: userId,
+      })
+      .returning();
+
+    const rows = Array.from({ length: nCuotas }, (_, i) => ({
+      tenantId,
+      planId: plan.id,
+      parcelId,
+      number: i + 1,
+      dueDate: addMonths(firstDue, i),
+      // Ajustar última cuota por redondeo.
+      amountClp:
+        i === nCuotas - 1 ? String(saldo - cuota * (nCuotas - 1)) : String(cuota),
+      status: "pendiente" as const,
+    }));
+    await tx.insert(installments).values(rows);
+  });
+
+  revalidatePath(`/app/parcelas/${parcelId}`);
+}
+
+export async function markInstallmentPaid(formData: FormData) {
+  await requirePermission("billing:write");
+  const installmentId = String(formData.get("installmentId"));
+  let parcelId = "";
+  await withCurrentTenant(async (tx, { tenantId, userId }) => {
+    const inst = await tx.query.installments.findFirst({
+      where: eq(installments.id, installmentId),
+    });
+    if (!inst) throw new Error("Cuota no encontrada.");
+    parcelId = inst.parcelId;
+    const parcel = await tx.query.parcels.findFirst({
+      where: eq(parcels.id, inst.parcelId),
+      columns: { code: true, projectId: true },
+    });
+    if (!parcel) throw new Error("Parcela no encontrada.");
+
+    // Comprobante de dinero por la cuota (entra a prefacturación).
+    const [{ value: lastFolio }] = await tx
+      .select({ value: max(moneyVouchers.folio) })
+      .from(moneyVouchers);
+    const [voucher] = await tx
+      .insert(moneyVouchers)
+      .values({
+        tenantId,
+        projectId: parcel.projectId,
+        parcelId: inst.parcelId,
+        folio: (lastFolio ?? 0) + 1,
+        concept: `Cuota ${inst.number} parcela ${parcel.code}`,
+        amountClp: inst.amountClp,
+        createdByUserId: userId,
+      })
+      .returning();
+
+    await tx
+      .update(installments)
+      .set({ status: "pagada", paidAt: new Date(), voucherId: voucher.id })
+      .where(eq(installments.id, installmentId));
+  });
+  if (parcelId) revalidatePath(`/app/parcelas/${parcelId}`);
+  revalidatePath("/app/cobranza");
 }

@@ -617,6 +617,13 @@ export const parcelDocuments = pgTable(
     // Estado del flujo legal: borrador → revisión abogado → firmado/notaría.
     status: text("status").default("borrador").notNull(),
     generatedByAi: boolean("generated_by_ai").default(false).notNull(),
+    // Export Word + firma electrónica (M2).
+    docxUrl: text("docx_url"),
+    signatureProvider: text("signature_provider"),
+    signatureStatus: text("signature_status"), // enviado | firmado | rechazado
+    signatureRef: text("signature_ref"),
+    signedUrl: text("signed_url"),
+    signedAt: timestamp("signed_at", { withTimezone: true }),
     createdByUserId: uuid("created_by_user_id").references(() => users.id, {
       onDelete: "set null",
     }),
@@ -627,6 +634,77 @@ export const parcelDocuments = pgTable(
   (t) => [
     index("parcel_documents_tenant_idx").on(t.tenantId),
     index("parcel_documents_parcel_idx").on(t.parcelId),
+  ],
+);
+
+// ─── M3 — Cobranza / plan de pagos (crédito directo) ──────────────────────────
+
+export const installmentStatusEnum = pgEnum("installment_status", [
+  "pendiente",
+  "pagada",
+  "vencida",
+  "condonada",
+]);
+
+export const paymentPlans = pgTable(
+  "payment_plans",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    parcelId: uuid("parcel_id")
+      .notNull()
+      .references(() => parcels.id, { onDelete: "cascade" }),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    clientId: uuid("client_id").references(() => clients.id, {
+      onDelete: "set null",
+    }),
+    totalClp: numeric("total_clp", { precision: 14, scale: 2 }).notNull(),
+    pieClp: numeric("pie_clp", { precision: 14, scale: 2 }).default("0"),
+    nCuotas: integer("n_cuotas").notNull(),
+    status: text("status").default("vigente").notNull(),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    index("payment_plans_tenant_idx").on(t.tenantId),
+    index("payment_plans_parcel_idx").on(t.parcelId),
+  ],
+);
+
+export const installments = pgTable(
+  "installments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    planId: uuid("plan_id")
+      .notNull()
+      .references(() => paymentPlans.id, { onDelete: "cascade" }),
+    parcelId: uuid("parcel_id")
+      .notNull()
+      .references(() => parcels.id, { onDelete: "cascade" }),
+    number: integer("number").notNull(),
+    dueDate: timestamp("due_date", { withTimezone: true }).notNull(),
+    amountClp: numeric("amount_clp", { precision: 14, scale: 2 }).notNull(),
+    status: installmentStatusEnum("status").default("pendiente").notNull(),
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+    voucherId: uuid("voucher_id").references(() => moneyVouchers.id, {
+      onDelete: "set null",
+    }),
+  },
+  (t) => [
+    index("installments_tenant_idx").on(t.tenantId),
+    index("installments_plan_idx").on(t.planId),
+    index("installments_parcel_idx").on(t.parcelId),
   ],
 );
 
@@ -750,6 +828,8 @@ export type SellerCompany = typeof sellerCompanies.$inferSelect;
 export type ParcelDocument = typeof parcelDocuments.$inferSelect;
 export type ProjectDocument = typeof projectDocuments.$inferSelect;
 export type PromesaTemplate = typeof promesaTemplates.$inferSelect;
+export type PaymentPlan = typeof paymentPlans.$inferSelect;
+export type Installment = typeof installments.$inferSelect;
 export type Acquisition = NonNullable<Project["acquisition"]>;
 
 /** Tablas de negocio sujetas a Row-Level Security por tenant. */
@@ -766,6 +846,8 @@ export const TENANT_SCOPED_TABLES = [
   "parcel_documents",
   "project_documents",
   "promesa_templates",
+  "payment_plans",
+  "installments",
 ] as const;
 
 export { sql };

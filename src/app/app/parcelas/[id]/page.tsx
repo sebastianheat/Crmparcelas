@@ -14,7 +14,14 @@ import {
 import { EVENT_LABELS, PARCEL_STATUS } from "@/lib/labels";
 import { formatClp, formatPrice } from "@/lib/money";
 import { ROLE_LABELS } from "@/lib/roles";
-import { applyParcelEvent, generatePromesa } from "@/server/actions";
+import {
+  applyParcelEvent,
+  createPaymentPlan,
+  generatePromesa,
+  markDocumentSigned,
+  markInstallmentPaid,
+  sendToSignature,
+} from "@/server/actions";
 import { getParcel, listClients, listSellers } from "@/server/queries";
 
 const EVENT_OPTIONS: { value: string; label: string }[] = [
@@ -242,31 +249,161 @@ export default async function ParcelPage({
           ) : (
             <ul className="divide-y divide-slate-100">
               {parcel.documents.map((d) => (
-                <li
-                  key={d.id}
-                  className="flex items-center justify-between py-2.5"
-                >
-                  <div>
-                    <a
-                      href={d.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-medium text-brand-600 hover:underline"
+                <li key={d.id} className="py-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <a
+                        href={d.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-medium text-brand-600 hover:underline"
+                      >
+                        📄 {d.title}
+                      </a>
+                      {d.docxUrl && (
+                        <a
+                          href={d.docxUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="ml-3 text-sm text-slate-500 hover:underline"
+                        >
+                          ⬇ Word
+                        </a>
+                      )}
+                      <p className="text-xs text-slate-400">
+                        {d.type} · {d.generatedByAi ? "IA · " : ""}
+                        {new Date(d.createdAt).toLocaleString("es-CL")}
+                      </p>
+                    </div>
+                    <Badge
+                      tone={
+                        d.signatureStatus === "firmado"
+                          ? "green"
+                          : d.signatureStatus === "enviado"
+                            ? "amber"
+                            : "slate"
+                      }
                     >
-                      📄 {d.title}
-                    </a>
-                    <p className="text-xs text-slate-400">
-                      {d.type} · {d.status}
-                      {d.generatedByAi ? " · IA" : ""} ·{" "}
-                      {new Date(d.createdAt).toLocaleString("es-CL")}
-                    </p>
+                      {d.signatureStatus ?? d.status}
+                    </Badge>
                   </div>
-                  <Badge tone={d.status === "borrador" ? "amber" : "green"}>
-                    {d.status}
-                  </Badge>
+                  <div className="mt-1 flex gap-2">
+                    {!d.signatureStatus && (
+                      <form action={sendToSignature}>
+                        <input type="hidden" name="documentId" value={d.id} />
+                        <button className="text-xs font-medium text-brand-600 hover:underline">
+                          ✍ Enviar a firma
+                        </button>
+                      </form>
+                    )}
+                    {d.signatureStatus === "enviado" && (
+                      <form action={markDocumentSigned}>
+                        <input type="hidden" name="documentId" value={d.id} />
+                        <button className="text-xs font-medium text-emerald-700 hover:underline">
+                          ✓ Marcar firmado
+                        </button>
+                      </form>
+                    )}
+                  </div>
                 </li>
               ))}
             </ul>
+          )}
+        </div>
+      </Card>
+
+      {/* Plan de pago / cobranza (crédito directo) */}
+      <Card>
+        <CardHeader
+          title="Plan de pago"
+          subtitle="Crédito directo: pie + cuotas con vencimientos y seguimiento."
+        />
+        <div className="p-5">
+          {!parcel.plan ? (
+            <form
+              action={createPaymentPlan}
+              className="grid items-end gap-4 sm:grid-cols-5"
+            >
+              <input type="hidden" name="parcelId" value={parcel.id} />
+              <Field label="Precio total (CLP)">
+                <Input
+                  name="totalClp"
+                  inputMode="numeric"
+                  defaultValue={parcel.price ?? ""}
+                />
+              </Field>
+              <Field label="Pie (CLP)">
+                <Input name="pieClp" inputMode="numeric" defaultValue="0" />
+              </Field>
+              <Field label="N° cuotas">
+                <Input name="nCuotas" type="number" min={1} max={240} defaultValue={12} />
+              </Field>
+              <Field label="1ª cuota">
+                <Input name="firstDueDate" type="date" />
+              </Field>
+              <Button type="submit">Crear plan</Button>
+            </form>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-100 text-left text-xs uppercase tracking-wide text-slate-400">
+                    <th className="px-3 py-2 font-medium">Cuota</th>
+                    <th className="px-3 py-2 font-medium">Vence</th>
+                    <th className="px-3 py-2 text-right font-medium">Monto</th>
+                    <th className="px-3 py-2 font-medium">Estado</th>
+                    <th className="px-3 py-2" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {parcel.installments.map((c) => {
+                    const overdue = c.overdue;
+                    return (
+                      <tr key={c.id} className="border-b border-slate-50">
+                        <td className="px-3 py-2 font-medium">{c.number}</td>
+                        <td className="px-3 py-2 text-slate-600">
+                          {new Date(c.dueDate).toLocaleDateString("es-CL")}
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          {formatClp(c.amountClp)}
+                        </td>
+                        <td className="px-3 py-2">
+                          <Badge
+                            tone={
+                              c.status === "pagada"
+                                ? "green"
+                                : overdue
+                                  ? "red"
+                                  : "amber"
+                            }
+                          >
+                            {c.status === "pagada"
+                              ? "Pagada"
+                              : overdue
+                                ? "Vencida"
+                                : "Pendiente"}
+                          </Badge>
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          {c.status !== "pagada" && (
+                            <form action={markInstallmentPaid}>
+                              <input
+                                type="hidden"
+                                name="installmentId"
+                                value={c.id}
+                              />
+                              <button className="text-xs font-medium text-brand-600 hover:underline">
+                                Marcar pagada
+                              </button>
+                            </form>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       </Card>
