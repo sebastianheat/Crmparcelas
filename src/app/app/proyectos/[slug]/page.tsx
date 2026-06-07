@@ -9,6 +9,7 @@ import {
   Input,
   LinkButton,
   Select,
+  Textarea,
 } from "@/components/ui";
 import { PARCEL_STATUS, PROJECT_STATUS } from "@/lib/labels";
 import { formatPrice } from "@/lib/money";
@@ -404,6 +405,54 @@ export default async function ProjectDetailPage({
               </Field>
               <Field label="Archivo Plano (CBR)">
                 <Input name="archivoPlano" defaultValue={acq.archivoPlano ?? ""} placeholder="1775" />
+              </Field>
+            </div>
+          </fieldset>
+
+          <fieldset className="rounded-lg border border-slate-200 p-4">
+            <legend className="px-1 text-sm font-medium text-slate-700">
+              Portafolio y riesgo
+            </legend>
+            <div className="grid gap-4 sm:grid-cols-4">
+              <Field label="Estado legal">
+                <Select name="legalStatus" defaultValue={project.legalStatus}>
+                  <option value="sin_definir">Sin definir</option>
+                  <option value="sag_ingresado">Ingresado al SAG</option>
+                  <option value="sag_certificado">Subdivisión certificada</option>
+                  <option value="en_inscripcion">En inscripción CBR</option>
+                  <option value="inscrito">Inscrito / transferible</option>
+                </Select>
+              </Field>
+              <Field label="Riesgo">
+                <Select name="riesgo" defaultValue={project.riesgo}>
+                  <option value="bajo">Bajo</option>
+                  <option value="medio">Medio</option>
+                  <option value="alto">Alto</option>
+                </Select>
+              </Field>
+              <Field label="Tenencia">
+                <Select name="propio" defaultValue={project.propio ? "propio" : "ajeno"}>
+                  <option value="propio">Propio</option>
+                  <option value="ajeno">Ajeno (consignación)</option>
+                </Select>
+              </Field>
+              <Field label="N° denuncias/querellas">
+                <Input
+                  name="denuncias"
+                  type="number"
+                  min={0}
+                  defaultValue={project.denuncias}
+                />
+              </Field>
+            </div>
+            <div className="mt-3">
+              <Field label="Notas legales / comentario">
+                <Textarea
+                  name="legalNotes"
+                  rows={2}
+                  defaultValue={project.legalNotes ?? ""}
+                  placeholder="Estado de trámites, servidumbres pendientes, denuncias…"
+                />
               </Field>
             </div>
           </fieldset>

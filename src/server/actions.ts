@@ -590,12 +590,24 @@ export async function saveProjectLegal(formData: FormData) {
 
   let slug = "";
   await withCurrentTenant(async (tx) => {
+    const legalStatus = (str("legalStatus") ?? "sin_definir") as
+      | "sin_definir"
+      | "sag_ingresado"
+      | "sag_certificado"
+      | "en_inscripcion"
+      | "inscrito";
+    const riesgo = (str("riesgo") ?? "bajo") as "bajo" | "medio" | "alto";
     const [p] = await tx
       .update(projects)
       .set({
         sellerCompanyId,
         notaria: str("notaria") ?? null,
         acquisition,
+        legalStatus,
+        riesgo,
+        propio: formData.get("propio") !== "ajeno",
+        denuncias: parseInt(String(formData.get("denuncias") || "0"), 10) || 0,
+        legalNotes: str("legalNotes") ?? null,
         updatedAt: new Date(),
       })
       .where(eq(projects.id, projectId))

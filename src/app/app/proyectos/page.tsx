@@ -5,7 +5,7 @@ import {
   EmptyState,
   LinkButton,
 } from "@/components/ui";
-import { PROJECT_STATUS } from "@/lib/labels";
+import { LEGAL_STATUS, PROJECT_STATUS, RIESGO } from "@/lib/labels";
 import { formatPrice } from "@/lib/money";
 import { listProjects } from "@/server/queries";
 
@@ -49,6 +49,19 @@ export default async function ProjectsPage() {
                   {ubic && (
                     <p className="mt-1 text-sm text-slate-500">{ubic}</p>
                   )}
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    <Badge tone={LEGAL_STATUS[p.legalStatus]?.tone}>
+                      {LEGAL_STATUS[p.legalStatus]?.label ?? p.legalStatus}
+                    </Badge>
+                    {p.riesgo !== "bajo" && (
+                      <Badge tone={RIESGO[p.riesgo]?.tone}>
+                        {RIESGO[p.riesgo]?.label}
+                      </Badge>
+                    )}
+                    {p.denuncias > 0 && (
+                      <Badge tone="red">{p.denuncias} denuncia(s)</Badge>
+                    )}
+                  </div>
                   <div className="mt-4 flex items-end justify-between">
                     <div>
                       <p className="text-xs text-slate-400">Desde</p>

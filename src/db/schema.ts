@@ -103,6 +103,17 @@ export const accessTypeEnum = pgEnum("access_type", [
   "tierra",
 ]);
 
+/** Estado legal del proyecto (ciclo SAG → CBR), observado en el portafolio real. */
+export const legalStatusEnum = pgEnum("legal_status", [
+  "sin_definir",
+  "sag_ingresado", // ingresado al SAG, en proceso de subdivisión
+  "sag_certificado", // subdivisión certificada por el SAG
+  "en_inscripcion", // en proceso de inscripción en el CBR
+  "inscrito", // subdivisión inscrita, lotes transferibles
+]);
+
+export const riesgoEnum = pgEnum("riesgo", ["bajo", "medio", "alto"]);
+
 /** Comprobante de dinero / prefactura (M3, el diferenciador). */
 export const voucherStatusEnum = pgEnum("voucher_status", [
   "registrado", // pendiente de validación por finanzas
@@ -328,6 +339,12 @@ export const projects = pgTable(
     ),
     // Notaría donde se firma (para promesa/escritura).
     notaria: text("notaria"),
+    // Gestión de portafolio (según el Excel real "Proyectos Mundo SpA").
+    legalStatus: legalStatusEnum("legal_status").default("sin_definir").notNull(),
+    riesgo: riesgoEnum("riesgo").default("bajo").notNull(),
+    propio: boolean("propio").default(true).notNull(), // propio vs ajeno (consignación)
+    denuncias: integer("denuncias").default(0).notNull(),
+    legalNotes: text("legal_notes"),
     // Datos de adquisición del campo, extraídos de la carpeta legal (M1).
     // Alimentan las cláusulas PRIMERO/SEGUNDO de la promesa (ver docs/Proceso_Legal_Parcelas.md).
     acquisition: jsonb("acquisition")

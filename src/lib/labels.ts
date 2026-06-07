@@ -61,6 +61,26 @@ export const EVENT_TO_STATUS: Partial<
   desbloqueo: "disponible",
 };
 
+export const LEGAL_STATUS: Record<
+  string,
+  { label: string; tone: "slate" | "amber" | "blue" | "green" }
+> = {
+  sin_definir: { label: "Sin definir", tone: "slate" },
+  sag_ingresado: { label: "Ingresado al SAG", tone: "amber" },
+  sag_certificado: { label: "Subdivisión certificada", tone: "blue" },
+  en_inscripcion: { label: "En inscripción CBR", tone: "blue" },
+  inscrito: { label: "Inscrito / transferible", tone: "green" },
+};
+
+export const RIESGO: Record<
+  string,
+  { label: string; tone: "green" | "amber" | "red" }
+> = {
+  bajo: { label: "Riesgo bajo", tone: "green" },
+  medio: { label: "Riesgo medio", tone: "amber" },
+  alto: { label: "Riesgo alto", tone: "red" },
+};
+
 export const COST_CATEGORY_LABELS: Record<string, string> = {
   marketing: "Marketing",
   terreno: "Terreno",
