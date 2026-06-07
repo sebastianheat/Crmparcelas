@@ -27,6 +27,7 @@ const NAV: { section: string; items: NavItem[] }[] = [
       { href: "/app/costos", label: "Costos", icon: "▸" },
       { href: "/app/sociedades", label: "Sociedades", icon: "⬢" },
       { href: "/app/matrices", label: "Matrices legales", icon: "▦" },
+      { href: "/app/legal", label: "Causas legales", icon: "⚖" },
       { href: "/app/equipo", label: "Equipo", icon: "◆" },
     ],
   },
@@ -77,7 +78,8 @@ export function AppShell({
                       (item.href !== "/app/equipo" ||
                         can(role, "users:manage")) &&
                       ((item.href !== "/app/sociedades" &&
-                        item.href !== "/app/matrices") ||
+                        item.href !== "/app/matrices" &&
+                        item.href !== "/app/legal") ||
                         can(role, "settings:write")),
                   )
                   .map((item) => {

@@ -13,6 +13,7 @@ import {
   costs,
   installments,
   invoices,
+  legalCases,
   memberships,
   moneyVouchers,
   parcelDocuments,
@@ -974,4 +975,62 @@ export async function markInstallmentPaid(formData: FormData) {
   });
   if (parcelId) revalidatePath(`/app/parcelas/${parcelId}`);
   revalidatePath("/app/cobranza");
+}
+
+// ─── Causas legales (querellas / denuncias) ───────────────────────────────────
+
+export async function createLegalCase(formData: FormData) {
+  await requirePermission("settings:write");
+  const projectId = String(formData.get("projectId") || "") || null;
+  const fechaRaw = String(formData.get("fechaInicio") || "");
+  const str = (k: string) => {
+    const v = String(formData.get(k) || "").trim();
+    return v || null;
+  };
+  await withCurrentTenant(async (tx, { tenantId, userId }) => {
+    await tx.insert(legalCases).values({
+      tenantId,
+      projectId,
+      type: (str("type") ?? "denuncia") as
+        | "querella"
+        | "denuncia"
+        | "demanda"
+        | "otro",
+      status: (str("status") ?? "vigente") as
+        | "vigente"
+        | "concluida"
+        | "archivada"
+        | "no_inicio",
+      personName: str("personName"),
+      counterparty: str("counterparty"),
+      accused: str("accused"),
+      tribunal: str("tribunal"),
+      rol: str("rol"),
+      anteQuien: str("anteQuien"),
+      abogado: str("abogado"),
+      contactoAbogado: str("contactoAbogado"),
+      perjuicioClp: num(formData.get("perjuicioClp")),
+      fechaInicio: fechaRaw ? new Date(fechaRaw) : null,
+      observacion: str("observacion"),
+      createdByUserId: userId,
+    });
+  });
+  revalidatePath("/app/legal");
+}
+
+export async function updateLegalCaseStatus(formData: FormData) {
+  await requirePermission("settings:write");
+  const id = String(formData.get("id"));
+  const status = String(formData.get("status")) as
+    | "vigente"
+    | "concluida"
+    | "archivada"
+    | "no_inicio";
+  await withCurrentTenant(async (tx) => {
+    await tx
+      .update(legalCases)
+      .set({ status, updatedAt: new Date() })
+      .where(eq(legalCases.id, id));
+  });
+  revalidatePath("/app/legal");
 }

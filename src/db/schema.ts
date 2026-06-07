@@ -747,6 +747,67 @@ export const promesaTemplates = pgTable(
   (t) => [index("promesa_templates_tenant_idx").on(t.tenantId)],
 );
 
+// ─── M2 — Causas legales (querellas / denuncias por parcela o cliente) ────────
+
+export const legalCaseTypeEnum = pgEnum("legal_case_type", [
+  "querella",
+  "denuncia",
+  "demanda",
+  "otro",
+]);
+
+export const legalCaseStatusEnum = pgEnum("legal_case_status", [
+  "vigente",
+  "concluida",
+  "archivada",
+  "no_inicio",
+]);
+
+export const legalCases = pgTable(
+  "legal_cases",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    projectId: uuid("project_id").references(() => projects.id, {
+      onDelete: "set null",
+    }),
+    parcelId: uuid("parcel_id").references(() => parcels.id, {
+      onDelete: "set null",
+    }),
+    clientId: uuid("client_id").references(() => clients.id, {
+      onDelete: "set null",
+    }),
+    type: legalCaseTypeEnum("type").default("denuncia").notNull(),
+    status: legalCaseStatusEnum("status").default("vigente").notNull(),
+    personName: text("person_name"), // cliente/persona involucrada
+    counterparty: text("counterparty"), // denunciante / querellante
+    accused: text("accused"), // imputado(s) / personas denunciadas
+    tribunal: text("tribunal"),
+    rol: text("rol"), // RIT / RUC / rol de causa
+    anteQuien: text("ante_quien"), // institución ante la que se denuncia
+    abogado: text("abogado"),
+    contactoAbogado: text("contacto_abogado"),
+    perjuicioClp: numeric("perjuicio_clp", { precision: 14, scale: 2 }),
+    fechaInicio: timestamp("fecha_inicio", { withTimezone: true }),
+    observacion: text("observacion"),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    index("legal_cases_tenant_idx").on(t.tenantId),
+    index("legal_cases_project_idx").on(t.projectId),
+  ],
+);
+
 // ─── M9 — Costos (para utilidad por proyecto) ─────────────────────────────────
 
 export const costs = pgTable(
@@ -847,6 +908,7 @@ export type ProjectDocument = typeof projectDocuments.$inferSelect;
 export type PromesaTemplate = typeof promesaTemplates.$inferSelect;
 export type PaymentPlan = typeof paymentPlans.$inferSelect;
 export type Installment = typeof installments.$inferSelect;
+export type LegalCase = typeof legalCases.$inferSelect;
 export type Acquisition = NonNullable<Project["acquisition"]>;
 
 /** Tablas de negocio sujetas a Row-Level Security por tenant. */
@@ -865,6 +927,7 @@ export const TENANT_SCOPED_TABLES = [
   "promesa_templates",
   "payment_plans",
   "installments",
+  "legal_cases",
 ] as const;
 
 export { sql };

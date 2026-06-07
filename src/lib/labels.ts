@@ -81,6 +81,23 @@ export const RIESGO: Record<
   alto: { label: "Riesgo alto", tone: "red" },
 };
 
+export const LEGAL_CASE_TYPE: Record<string, string> = {
+  querella: "Querella",
+  denuncia: "Denuncia",
+  demanda: "Demanda",
+  otro: "Otro",
+};
+
+export const LEGAL_CASE_STATUS: Record<
+  string,
+  { label: string; tone: "amber" | "green" | "slate" | "red" }
+> = {
+  vigente: { label: "Vigente", tone: "amber" },
+  concluida: { label: "Concluida", tone: "green" },
+  archivada: { label: "Archivada", tone: "slate" },
+  no_inicio: { label: "Facultad de no inicio", tone: "slate" },
+};
+
 export const COST_CATEGORY_LABELS: Record<string, string> = {
   marketing: "Marketing",
   terreno: "Terreno",

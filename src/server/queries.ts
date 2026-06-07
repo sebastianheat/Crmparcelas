@@ -4,6 +4,7 @@ import {
   clients,
   costs,
   installments,
+  legalCases,
   memberships,
   moneyVouchers,
   parcelDocuments,
@@ -176,6 +177,25 @@ export function listSellerCompanies() {
   return withCurrentTenant((tx) =>
     tx.query.sellerCompanies.findMany({ orderBy: sellerCompanies.razonSocial }),
   );
+}
+
+export function listLegalCases() {
+  return withCurrentTenant(async (tx) => {
+    const rows = await tx
+      .select({
+        c: legalCases,
+        projectName: projects.name,
+      })
+      .from(legalCases)
+      .leftJoin(projects, eq(legalCases.projectId, projects.id))
+      .orderBy(desc(legalCases.createdAt));
+    const vigentes = rows.filter((r) => r.c.status === "vigente").length;
+    const perjuicioTotal = rows.reduce(
+      (a, r) => a + (toNumber(r.c.perjuicioClp) ?? 0),
+      0,
+    );
+    return { rows, totals: { vigentes, perjuicioTotal, total: rows.length } };
+  });
 }
 
 export function listPromesaTemplates() {
