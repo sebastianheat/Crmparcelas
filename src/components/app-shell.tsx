@@ -27,6 +27,7 @@ const NAV: { section: string; items: NavItem[] }[] = [
       { href: "/app/prefacturacion", label: "Prefacturación", icon: "₿" },
       { href: "/app/cobranza", label: "Cobranza", icon: "◷" },
       { href: "/app/conciliacion", label: "Conciliación", icon: "⇄" },
+      { href: "/app/flujo-caja", label: "Flujo de caja", icon: "≈" },
       { href: "/app/comisiones", label: "Comisiones", icon: "％" },
       { href: "/app/costos", label: "Costos", icon: "▸" },
       { href: "/app/sociedades", label: "Sociedades", icon: "⬢" },
@@ -84,7 +85,8 @@ export function AppShell({
                         item.href !== "/app/legal") ||
                         can(role, "settings:write")) &&
                       ((item.href !== "/app/comisiones" &&
-                        item.href !== "/app/conciliacion") ||
+                        item.href !== "/app/conciliacion" &&
+                        item.href !== "/app/flujo-caja") ||
                         can(role, "finance:read")) &&
                       ((item.href !== "/app/crm" &&
                         item.href !== "/app/whatsapp") ||

@@ -850,6 +850,44 @@ export const leadActivities = pgTable(
   ],
 );
 
+// ─── M2 — Carpeta digital del cliente (expediente documental) ─────────────────
+
+export const clientDocTypeEnum = pgEnum("client_doc_type", [
+  "cedula",
+  "comprobante_pago",
+  "vale_vista",
+  "promesa",
+  "escritura",
+  "otro",
+]);
+
+export const clientDocuments = pgTable(
+  "client_documents",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    clientId: uuid("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    type: clientDocTypeEnum("type").default("otro").notNull(),
+    title: text("title").notNull(),
+    url: text("url").notNull(),
+    mime: text("mime"),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    index("client_documents_tenant_idx").on(t.tenantId),
+    index("client_documents_client_idx").on(t.clientId),
+  ],
+);
+
 // ─── M3 — Conciliación bancaria (open banking: Fintoc) ────────────────────────
 
 export const bankMovementStatusEnum = pgEnum("bank_movement_status", [
@@ -1056,6 +1094,7 @@ export type PaymentPlan = typeof paymentPlans.$inferSelect;
 export type Installment = typeof installments.$inferSelect;
 export type LegalCase = typeof legalCases.$inferSelect;
 export type BankMovement = typeof bankMovements.$inferSelect;
+export type ClientDocument = typeof clientDocuments.$inferSelect;
 export type Lead = typeof leads.$inferSelect;
 export type LeadActivity = typeof leadActivities.$inferSelect;
 export type Acquisition = NonNullable<Project["acquisition"]>;
@@ -1080,6 +1119,7 @@ export const TENANT_SCOPED_TABLES = [
   "leads",
   "lead_activities",
   "bank_movements",
+  "client_documents",
 ] as const;
 
 export { sql };

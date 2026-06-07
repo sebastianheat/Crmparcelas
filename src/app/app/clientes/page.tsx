@@ -1,3 +1,4 @@
+import Link from "next/link";
 import {
   Button,
   Card,
@@ -87,8 +88,13 @@ export default async function ClientsPage() {
               <tbody>
                 {clients.map((c) => (
                   <tr key={c.id} className="border-b border-slate-50">
-                    <td className="px-5 py-3 font-medium text-slate-900">
-                      {c.name}
+                    <td className="px-5 py-3 font-medium">
+                      <Link
+                        href={`/app/clientes/${c.id}`}
+                        className="text-slate-900 hover:text-brand-600"
+                      >
+                        {c.name}
+                      </Link>
                       {c.direccion && (
                         <div className="text-xs text-slate-400">{c.direccion}</div>
                       )}

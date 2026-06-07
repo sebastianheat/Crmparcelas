@@ -141,6 +141,20 @@ export const LEGAL_CASE_STATUS: Record<
   no_inicio: { label: "Facultad de no inicio", tone: "slate" },
 };
 
+// Tipos de documento del expediente del cliente (checklist).
+export const CLIENT_DOC_TYPES: { value: string; label: string; required: boolean }[] = [
+  { value: "cedula", label: "Cédula de identidad", required: true },
+  { value: "comprobante_pago", label: "Comprobante de pago", required: true },
+  { value: "vale_vista", label: "Vale vista", required: false },
+  { value: "promesa", label: "Promesa firmada", required: true },
+  { value: "escritura", label: "Escritura", required: false },
+  { value: "otro", label: "Otro", required: false },
+];
+
+export const CLIENT_DOC_LABELS: Record<string, string> = Object.fromEntries(
+  CLIENT_DOC_TYPES.map((t) => [t.value, t.label]),
+);
+
 export const COST_CATEGORY_LABELS: Record<string, string> = {
   marketing: "Marketing",
   terreno: "Terreno",

@@ -3,6 +3,7 @@ import { alias } from "drizzle-orm/pg-core";
 import {
   clients,
   bankMovements,
+  clientDocuments,
   costs,
   installments,
   leadActivities,
@@ -130,6 +131,79 @@ export function getParcel(id: string) {
 }
 
 // ─── Cobranza (dashboard de cuotas) ───────────────────────────────────────────
+
+// ─── Flujo de caja proyectado (desde las cuotas comprometidas) ────────────────
+
+export function getCashFlow() {
+  return withCurrentTenant(async (tx) => {
+    const rows = await tx
+      .select({
+        inst: installments,
+        projectName: projects.name,
+      })
+      .from(installments)
+      .leftJoin(parcels, eq(installments.parcelId, parcels.id))
+      .leftJoin(projects, eq(parcels.projectId, projects.id));
+
+    const n = (v: string | number | null) => toNumber(v) ?? 0;
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    // 12 meses hacia adelante.
+    const months = Array.from({ length: 12 }, (_, i) => {
+      const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+      return {
+        key: `${d.getFullYear()}-${d.getMonth()}`,
+        label: d.toLocaleDateString("es-CL", { month: "short", year: "2-digit" }),
+        projected: 0,
+      };
+    });
+    const monthIdx = new Map(months.map((m, i) => [m.key, i]));
+
+    let comprometido = 0;
+    let vencido = 0;
+    let prox30 = 0;
+    let prox90 = 0;
+    let recaudado = 0;
+    const byProject = new Map<string, number>();
+
+    for (const r of rows) {
+      const amt = n(r.inst.amountClp);
+      if (r.inst.status === "pagada") {
+        recaudado += amt;
+        continue;
+      }
+      if (r.inst.status !== "pendiente") continue;
+      comprometido += amt;
+      const due = new Date(r.inst.dueDate);
+      const pname = r.projectName ?? "—";
+      byProject.set(pname, (byProject.get(pname) ?? 0) + amt);
+
+      if (due < startOfMonth) {
+        vencido += amt;
+      } else {
+        const key = `${due.getFullYear()}-${due.getMonth()}`;
+        const idx = monthIdx.get(key);
+        if (idx != null) months[idx].projected += amt;
+      }
+      const diffDays = (due.getTime() - now.getTime()) / 86_400_000;
+      if (diffDays >= 0 && diffDays <= 30) prox30 += amt;
+      if (diffDays >= 0 && diffDays <= 90) prox90 += amt;
+    }
+
+    const projects_ = [...byProject.entries()]
+      .map(([name, monto]) => ({ name, monto }))
+      .sort((a, b) => b.monto - a.monto);
+    const maxMonth = Math.max(1, ...months.map((m) => m.projected));
+
+    return {
+      months,
+      maxMonth,
+      byProject: projects_,
+      totals: { comprometido, vencido, prox30, prox90, recaudado },
+    };
+  });
+}
 
 export function getCobranza() {
   return withCurrentTenant(async (tx) => {
@@ -384,6 +458,31 @@ export function listClients() {
   return withCurrentTenant((tx) =>
     tx.query.clients.findMany({ orderBy: clients.name }),
   );
+}
+
+export function getClient(id: string) {
+  return withCurrentTenant(async (tx) => {
+    const client = await tx.query.clients.findFirst({
+      where: eq(clients.id, id),
+    });
+    if (!client) return null;
+    const documents = await tx
+      .select()
+      .from(clientDocuments)
+      .where(eq(clientDocuments.clientId, id))
+      .orderBy(desc(clientDocuments.createdAt));
+    const ownedParcels = await tx
+      .select({
+        id: parcels.id,
+        code: parcels.code,
+        status: parcels.status,
+        projectName: projects.name,
+      })
+      .from(parcels)
+      .leftJoin(projects, eq(parcels.projectId, projects.id))
+      .where(eq(parcels.currentClientId, id));
+    return { ...client, documents, parcels: ownedParcels };
+  });
 }
 
 // ─── Equipo (usuarios y roles) ────────────────────────────────────────────────

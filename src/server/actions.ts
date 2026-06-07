@@ -10,6 +10,7 @@ import { db } from "@/db/client";
 import { withTenant } from "@/db/tenant";
 import {
   bankMovements,
+  clientDocuments,
   clients,
   costs,
   installments,
@@ -1312,4 +1313,51 @@ export async function ignoreMovement(formData: FormData) {
       .where(eq(bankMovements.id, id));
   });
   revalidatePath("/app/conciliacion");
+}
+
+// ─── Carpeta digital del cliente (expediente) ─────────────────────────────────
+
+type ClientDocType = (typeof clientDocuments.$inferInsert)["type"];
+
+export async function uploadClientDocument(formData: FormData) {
+  await requirePermission("events:write");
+  const clientId = String(formData.get("clientId"));
+  const type = String(formData.get("docType") || "otro") as ClientDocType;
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) {
+    throw new Error("Adjunta un archivo.");
+  }
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  await withCurrentTenant(async (tx, { tenantId, userId }) => {
+    const client = await tx.query.clients.findFirst({
+      where: eq(clients.id, clientId),
+    });
+    if (!client) throw new Error("Cliente no encontrado.");
+    const url = await storeFile({
+      tenantId,
+      pathname: `clientes/${clientId}/${Date.now()}-${file.name}`,
+      bytes,
+      contentType: file.type || "application/octet-stream",
+    });
+    await tx.insert(clientDocuments).values({
+      tenantId,
+      clientId,
+      type,
+      title: file.name,
+      url,
+      mime: file.type || null,
+      createdByUserId: userId,
+    });
+  });
+  revalidatePath(`/app/clientes/${clientId}`);
+}
+
+export async function deleteClientDocument(formData: FormData) {
+  await requirePermission("events:write");
+  const id = String(formData.get("id"));
+  const clientId = String(formData.get("clientId"));
+  await withCurrentTenant(async (tx) => {
+    await tx.delete(clientDocuments).where(eq(clientDocuments.id, id));
+  });
+  revalidatePath(`/app/clientes/${clientId}`);
 }
