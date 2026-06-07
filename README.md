@@ -4,19 +4,22 @@
 
 Especificación completa del producto en [`docs/5000_Spec.md`](docs/5000_Spec.md) e inteligencia de mercado en [`docs/5000_Repositorio_Referencia.md`](docs/5000_Repositorio_Referencia.md).
 
-## Estado: Fase 1 (MVP) — el núcleo de orden
+## Estado actual
 
-Implementado en este hito:
+- **Multi-tenant con aislamiento real** — `tenant_id` + Row-Level Security en Postgres. La app conecta con un rol restringido; migraciones/seed con el rol owner.
+- **Autenticación y roles** (Auth.js). Set completo: CEO/Super Admin, Gerente Comercial, Jefe de Ventas, Vendedor, Gerente de Finanzas, Contador, Cajero, Legal, Marketing, Corredor — con permisos por capacidad.
+- **Equipo** (`/app/equipo`): crear usuarios y asignar rol.
+- **M1 — Proyectos y Stock**: badge de estado, atributos, stock de parcelas; **datos de adquisición** (predio, plano, deslindes, fojas/n°/año CBR, rol SII, subdivisión SAG); **documentos de adquisición + extracción con Claude** (PDF/imagen → autocompleta datos legales); **estado legal, riesgo, propio/ajeno, denuncias** (portafolio).
+- **M2 — Documentación legal**: historial inmutable de la parcela (append-only + trigger); **sociedades vendedoras**; **matriz de promesa configurable** (editable por legal) + **generación de la promesa con IA** (PDF y **Word**); repositorio documental por parcela; **firma electrónica** (interfaz `SignatureProvider`, mock).
+- **M3 — Finanzas**: **prefacturación** (comprobante → factura exenta, interfaz `DTEProvider`); **validación de reservas** con foto de comprobante obligatoria → PDF; **cobranza / plan de pagos** (crédito directo: pie + cuotas, vencimientos, dashboard `/app/cobranza`).
+- **M9 — Dashboard financiero + portafolio** — ingresado/prometido/escriturado, margen, estado legal y riesgo por proyecto.
+- **Clientes** con datos legales (para la promesa).
+- **Landing pública + mapa de stock** compartible por URL (`/p/[tenant]/[project]`).
+- **IA (Claude)** — copy de landing, extracción de documentos y redacción/corrección de promesas.
+- **Almacenamiento** vía `storeFile` — Vercel Blob si está configurado, si no Postgres (`/api/files`).
 
-- **Multi-tenant con aislamiento real** — `tenant_id` + Row-Level Security en Postgres. La app conecta con un rol restringido; las migraciones/seed con el rol owner.
-- **Autenticación y roles** (Auth.js, 7 roles del rubro con permisos por capacidad).
-- **M1 — Proyectos y Stock** — proyectos con badge de estado, atributos (acceso, factibilidad, entorno, cercanías) y stock de parcelas.
-- **M2 (base) — Historial inmutable de la parcela** — tabla append-only (reserva → promesa → resciliación → escritura → inscripción → entrega), protegida por trigger.
-- **M3 — Prefacturación** — comprobante de dinero → factura exenta, con interfaz `DTEProvider` (mock; lista para OpenFactura/LibreDTE/SimpleAPI).
-- **M9 — Dashboard financiero** — ingresado vs prometido vs escriturado y margen por proyecto.
-- **IA (Claude)** — generación del copy de landing por proyecto con el speech de 5 pasos del rubro.
-
-Próximas fases (CRM/embudo, agente IA WhatsApp, comisiones, contenido, Ads, marketplace) en el roadmap del spec (§11).
+Proceso legal del rubro documentado en [`docs/Proceso_Legal_Parcelas.md`](docs/Proceso_Legal_Parcelas.md).
+Próximas fases (CRM/embudo, agente IA WhatsApp, comisiones, contenido, Ads, marketplace) en §11 del spec.
 
 ## Stack
 
