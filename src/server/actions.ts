@@ -17,6 +17,7 @@ import {
   parcelDocuments,
   parcelEvents,
   parcels,
+  projectDocuments,
   projects,
   sellerCompanies,
   users,
@@ -24,6 +25,7 @@ import {
   type Role,
 } from "@/db/schema";
 import { generateLandingCopy } from "@/lib/ai/claude";
+import { extractAcquisition } from "@/lib/ai/extract";
 import { getDteProvider } from "@/lib/dte";
 import { EVENT_TO_STATUS } from "@/lib/labels";
 import { generateReservaPdf, renderDocumentPdf } from "@/lib/pdf";
@@ -664,4 +666,77 @@ export async function generatePromesa(formData: FormData) {
 
   revalidatePath(`/app/parcelas/${parcelId}`);
   if (projectSlug) revalidatePath(`/app/proyectos/${projectSlug}`);
+}
+
+// ─── Documentos de adquisición + extracción con IA (M1) ───────────────────────
+
+type ProjectDocType = (typeof projectDocuments.$inferInsert)["type"];
+
+export async function uploadProjectDocument(formData: FormData) {
+  await requirePermission("projects:write");
+  const projectId = String(formData.get("projectId"));
+  const type = (String(formData.get("docType") || "otro") as ProjectDocType);
+  const file = formData.get("file");
+  const doExtract = formData.get("extract") === "on";
+  if (!(file instanceof File) || file.size === 0) {
+    throw new Error("Adjunta un archivo.");
+  }
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const clean = (o: Record<string, unknown> | undefined | null) =>
+    Object.fromEntries(
+      Object.entries(o ?? {}).filter(([, v]) => v != null && v !== ""),
+    );
+
+  let projectSlug = "";
+  await withCurrentTenant(async (tx, { tenantId, userId }) => {
+    const project = await tx.query.projects.findFirst({
+      where: eq(projects.id, projectId),
+    });
+    if (!project) throw new Error("Proyecto no encontrado.");
+    projectSlug = project.slug;
+
+    const url = await storeFile({
+      tenantId,
+      pathname: `proyectos/${project.slug}/${file.name}`,
+      bytes,
+      contentType: file.type || "application/octet-stream",
+    });
+
+    let extracted = false;
+    if (doExtract) {
+      const result = await extractAcquisition(bytes, file.type || "");
+      const cur = project.acquisition ?? {};
+      const ex = result.acquisition ?? {};
+      const merged = {
+        ...cur,
+        ...clean(ex as Record<string, unknown>),
+        deslindes: {
+          ...(cur.deslindes ?? {}),
+          ...clean(ex.deslindes as Record<string, unknown>),
+        },
+      };
+      await tx
+        .update(projects)
+        .set({
+          acquisition: merged,
+          notaria: result.notaria || project.notaria,
+          updatedAt: new Date(),
+        })
+        .where(eq(projects.id, projectId));
+      extracted = true;
+    }
+
+    await tx.insert(projectDocuments).values({
+      tenantId,
+      projectId,
+      type,
+      title: file.name,
+      url,
+      mime: file.type || null,
+      extracted,
+      createdByUserId: userId,
+    });
+  });
+
+  revalidatePath(`/app/proyectos/${projectSlug}`);
 }

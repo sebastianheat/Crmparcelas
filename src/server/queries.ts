@@ -8,6 +8,7 @@ import {
   parcelDocuments,
   parcelEvents,
   parcels,
+  projectDocuments,
   projects,
   sellerCompanies,
   users,
@@ -71,7 +72,13 @@ export function getProjectBySlug(slug: string) {
         },
       },
     });
-    return project ?? null;
+    if (!project) return null;
+    const documents = await tx
+      .select()
+      .from(projectDocuments)
+      .where(eq(projectDocuments.projectId, project.id))
+      .orderBy(desc(projectDocuments.createdAt));
+    return { ...project, documents };
   });
 }
 

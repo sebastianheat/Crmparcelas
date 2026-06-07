@@ -13,8 +13,16 @@ import {
 import { PARCEL_STATUS, PROJECT_STATUS } from "@/lib/labels";
 import { formatPrice } from "@/lib/money";
 import { requireSession } from "@/lib/session";
-import { addParcels, generateLanding, saveProjectLegal } from "@/server/actions";
+import {
+  addParcels,
+  generateLanding,
+  saveProjectLegal,
+  uploadProjectDocument,
+} from "@/server/actions";
 import { getProjectBySlug, listSellerCompanies } from "@/server/queries";
+
+// La extracción de documentos con IA puede tardar varios segundos.
+export const maxDuration = 60;
 
 export default async function ProjectDetailPage({
   params,
@@ -223,6 +231,66 @@ export default async function ProjectDetailPage({
             <Button type="submit">Agregar</Button>
           </div>
         </form>
+      </Card>
+
+      {/* Documentos de adquisición + extracción con IA (M1) */}
+      <Card>
+        <CardHeader
+          title="Documentos de adquisición"
+          subtitle="Sube la compraventa, inscripción CBR, certificado SAG o plano. La IA puede autocompletar los datos legales."
+        />
+        <form
+          action={uploadProjectDocument}
+          className="grid items-end gap-4 p-5 sm:grid-cols-4"
+        >
+          <input type="hidden" name="projectId" value={project.id} />
+          <Field label="Tipo de documento">
+            <Select name="docType" defaultValue="inscripcion_cbr">
+              <option value="compraventa">Compraventa del campo</option>
+              <option value="inscripcion_cbr">Inscripción CBR</option>
+              <option value="certificado_sag">Certificado SAG</option>
+              <option value="asignacion_roles">Asignación de roles</option>
+              <option value="plano">Plano de subdivisión</option>
+              <option value="aguas">Derechos de aguas</option>
+              <option value="estudio_titulos">Estudio de títulos</option>
+              <option value="otro">Otro</option>
+            </Select>
+          </Field>
+          <Field label="Archivo (PDF o imagen)">
+            <Input
+              name="file"
+              type="file"
+              accept="application/pdf,image/*"
+              required
+              className="file:mr-2 file:rounded-md file:border-0 file:bg-slate-100 file:px-2 file:py-1.5 file:text-xs"
+            />
+          </Field>
+          <label className="flex items-center gap-2 text-sm text-slate-700">
+            <input type="checkbox" name="extract" defaultChecked className="rounded" />
+            Autocompletar con IA
+          </label>
+          <Button type="submit">Subir documento</Button>
+        </form>
+        {project.documents.length > 0 && (
+          <ul className="divide-y divide-slate-100 px-5 pb-4">
+            {project.documents.map((d) => (
+              <li key={d.id} className="flex items-center justify-between py-2">
+                <a
+                  href={d.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm font-medium text-brand-600 hover:underline"
+                >
+                  📎 {d.title}
+                </a>
+                <span className="text-xs text-slate-400">
+                  {d.type}
+                  {d.extracted ? " · ✨ extraído" : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
       </Card>
 
       {/* Datos legales / adquisición (alimentan la promesa) */}

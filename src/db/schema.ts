@@ -554,6 +554,48 @@ export const parcelDocTypeEnum = pgEnum("parcel_doc_type", [
   "otro",
 ]);
 
+/** Tipos de documento de adquisición del proyecto (M1). */
+export const projectDocTypeEnum = pgEnum("project_doc_type", [
+  "compraventa",
+  "inscripcion_cbr",
+  "certificado_sag",
+  "asignacion_roles",
+  "plano",
+  "aguas",
+  "estudio_titulos",
+  "otro",
+]);
+
+// ─── M1 — Documentos de adquisición del proyecto ──────────────────────────────
+
+export const projectDocuments = pgTable(
+  "project_documents",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    type: projectDocTypeEnum("type").notNull(),
+    title: text("title").notNull(),
+    url: text("url").notNull(),
+    mime: text("mime"),
+    extracted: boolean("extracted").default(false).notNull(),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    index("project_documents_tenant_idx").on(t.tenantId),
+    index("project_documents_project_idx").on(t.projectId),
+  ],
+);
+
 // ─── M2 — Repositorio documental por parcela ──────────────────────────────────
 
 export const parcelDocuments = pgTable(
@@ -684,6 +726,8 @@ export type Cost = typeof costs.$inferSelect;
 export type Client = typeof clients.$inferSelect;
 export type SellerCompany = typeof sellerCompanies.$inferSelect;
 export type ParcelDocument = typeof parcelDocuments.$inferSelect;
+export type ProjectDocument = typeof projectDocuments.$inferSelect;
+export type Acquisition = NonNullable<Project["acquisition"]>;
 
 /** Tablas de negocio sujetas a Row-Level Security por tenant. */
 export const TENANT_SCOPED_TABLES = [
@@ -697,6 +741,7 @@ export const TENANT_SCOPED_TABLES = [
   "invoices",
   "costs",
   "parcel_documents",
+  "project_documents",
 ] as const;
 
 export { sql };
