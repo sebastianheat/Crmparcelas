@@ -12,9 +12,37 @@ import {
   sellerCompanies,
   users,
 } from "@/db/schema";
+import { db } from "@/db/client";
+import { tenants } from "@/db/schema";
+import { withTenant } from "@/db/tenant";
 import { toNumber } from "@/lib/money";
 import { SELLER_ROLES } from "@/lib/roles";
 import { withCurrentTenant } from "@/lib/session";
+
+// ─── Público (landing / mapa de stock compartible por URL) ────────────────────
+
+export async function getPublicProject(tenantSlug: string, projectSlug: string) {
+  const tenant = await db.query.tenants.findFirst({
+    where: eq(tenants.slug, tenantSlug),
+  });
+  if (!tenant) return null;
+  return withTenant(tenant.id, async (tx) => {
+    const project = await tx.query.projects.findFirst({
+      where: eq(projects.slug, projectSlug),
+      with: { parcels: { orderBy: parcels.code } },
+    });
+    if (!project) return null;
+    return {
+      tenant: {
+        name: tenant.name,
+        brandPrimary: tenant.brandPrimary,
+        brandSecondary: tenant.brandSecondary,
+        logoUrl: tenant.logoUrl,
+      },
+      project,
+    };
+  });
+}
 
 // ─── Proyectos ────────────────────────────────────────────────────────────────
 

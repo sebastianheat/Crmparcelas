@@ -12,6 +12,7 @@ import {
 } from "@/components/ui";
 import { PARCEL_STATUS, PROJECT_STATUS } from "@/lib/labels";
 import { formatPrice } from "@/lib/money";
+import { requireSession } from "@/lib/session";
 import { addParcels, generateLanding, saveProjectLegal } from "@/server/actions";
 import { getProjectBySlug, listSellerCompanies } from "@/server/queries";
 
@@ -19,11 +20,14 @@ export default async function ProjectDetailPage({
   params,
 }: PageProps<"/app/proyectos/[slug]">) {
   const { slug } = await params;
-  const [project, companies] = await Promise.all([
+  const [session, project, companies] = await Promise.all([
+    requireSession(),
     getProjectBySlug(slug),
     listSellerCompanies(),
   ]);
   if (!project) notFound();
+
+  const publicUrl = `/p/${session.tenantSlug}/${project.slug}`;
 
   const acq = project.acquisition ?? {};
   const st = PROJECT_STATUS[project.status];
@@ -52,9 +56,14 @@ export default async function ProjectDetailPage({
           </div>
           <p className="mt-1 text-sm text-slate-500">{ubic || "Sin ubicación"}</p>
         </div>
-        <LinkButton href="/app/proyectos" variant="ghost">
-          ← Proyectos
-        </LinkButton>
+        <div className="flex items-center gap-2">
+          <LinkButton href={publicUrl} variant="secondary">
+            🔗 Landing pública
+          </LinkButton>
+          <LinkButton href="/app/proyectos" variant="ghost">
+            ← Proyectos
+          </LinkButton>
+        </div>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
