@@ -127,6 +127,13 @@
       "when": 1780858146362,
       "tag": "0017_faulty_anita_blake",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1780859199149,
+      "tag": "0018_majestic_the_order",
+      "breakpoints": true
     }
   ]
 }

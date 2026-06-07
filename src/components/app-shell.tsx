@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
 import { ROLE_LABELS, can } from "@/lib/roles";
 import type { Role } from "@/db/schema";
@@ -47,6 +47,87 @@ const NAV: { section: string; items: NavItem[] }[] = [
   },
 ];
 
+function canSee(role: Role, href: string): boolean {
+  return (
+    (href !== "/app/equipo" || can(role, "users:manage")) &&
+    ((href !== "/app/sociedades" &&
+      href !== "/app/matrices" &&
+      href !== "/app/legal") ||
+      can(role, "settings:write")) &&
+    ((href !== "/app/comisiones" &&
+      href !== "/app/conciliacion" &&
+      href !== "/app/flujo-caja") ||
+      can(role, "finance:read")) &&
+    ((href !== "/app/crm" && href !== "/app/whatsapp") ||
+      can(role, "reservas:create")) &&
+    (href !== "/app/reportes" ||
+      can(role, "finance:read") ||
+      can(role, "reservas:create"))
+  );
+}
+
+function NavGroups({
+  role,
+  pathname,
+  onNavigate,
+}: {
+  role: Role;
+  pathname: string;
+  onNavigate?: () => void;
+}) {
+  return (
+    <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-5">
+      {NAV.map((group) => (
+        <div key={group.section}>
+          <p className="px-3 pb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            {group.section}
+          </p>
+          <ul className="space-y-1">
+            {group.items
+              .filter((item) => canSee(role, item.href))
+              .map((item) => {
+                const active =
+                  !item.soon &&
+                  (item.href === "/app"
+                    ? pathname === "/app"
+                    : pathname.startsWith(item.href));
+                return (
+                  <li key={item.label}>
+                    <Link
+                      href={item.soon ? "#" : item.href}
+                      aria-disabled={item.soon}
+                      onClick={item.soon ? undefined : onNavigate}
+                      className={cn(
+                        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium",
+                        item.soon
+                          ? "cursor-default text-slate-300"
+                          : active
+                            ? "bg-brand-50 text-brand-700"
+                            : "text-slate-600 hover:bg-slate-100",
+                      )}
+                    >
+                      <span className="w-4 text-center">{item.icon}</span>
+                      {item.label}
+                    </Link>
+                  </li>
+                );
+              })}
+          </ul>
+        </div>
+      ))}
+    </nav>
+  );
+}
+
+function Brand() {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-lg font-bold tracking-tight text-brand-600">5000</span>
+      <span className="text-xs text-slate-400">by HEAT</span>
+    </div>
+  );
+}
+
 export function AppShell({
   children,
   tenantName,
@@ -59,85 +140,67 @@ export function AppShell({
   role: Role;
 }) {
   const pathname = usePathname();
+  const [open, setOpen] = useState(false);
 
   return (
     <div className="flex min-h-screen">
-      {/* Sidebar */}
+      {/* Sidebar desktop */}
       <aside className="hidden w-64 shrink-0 flex-col border-r border-slate-200 bg-white md:flex">
-        <div className="flex h-16 items-center gap-2 border-b border-slate-100 px-5">
-          <span className="text-lg font-bold tracking-tight text-brand-600">
-            5000
-          </span>
-          <span className="text-xs text-slate-400">by HEAT</span>
+        <div className="flex h-16 items-center border-b border-slate-100 px-5">
+          <Brand />
         </div>
-        <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-5">
-          {NAV.map((group) => (
-            <div key={group.section}>
-              <p className="px-3 pb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                {group.section}
-              </p>
-              <ul className="space-y-1">
-                {group.items
-                  .filter(
-                    (item) =>
-                      (item.href !== "/app/equipo" ||
-                        can(role, "users:manage")) &&
-                      ((item.href !== "/app/sociedades" &&
-                        item.href !== "/app/matrices" &&
-                        item.href !== "/app/legal") ||
-                        can(role, "settings:write")) &&
-                      ((item.href !== "/app/comisiones" &&
-                        item.href !== "/app/conciliacion" &&
-                        item.href !== "/app/flujo-caja") ||
-                        can(role, "finance:read")) &&
-                      ((item.href !== "/app/crm" &&
-                        item.href !== "/app/whatsapp") ||
-                        can(role, "reservas:create")) &&
-                      (item.href !== "/app/reportes" ||
-                        can(role, "finance:read") ||
-                        can(role, "reservas:create")),
-                  )
-                  .map((item) => {
-                  const active =
-                    !item.soon &&
-                    (item.href === "/app"
-                      ? pathname === "/app"
-                      : pathname.startsWith(item.href));
-                  return (
-                    <li key={item.label}>
-                      <Link
-                        href={item.soon ? "#" : item.href}
-                        aria-disabled={item.soon}
-                        className={cn(
-                          "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium",
-                          item.soon
-                            ? "cursor-default text-slate-300"
-                            : active
-                              ? "bg-brand-50 text-brand-700"
-                              : "text-slate-600 hover:bg-slate-100",
-                        )}
-                      >
-                        <span className="w-4 text-center">{item.icon}</span>
-                        {item.label}
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          ))}
-        </nav>
+        <NavGroups role={role} pathname={pathname} />
       </aside>
 
+      {/* Drawer móvil */}
+      {open && (
+        <div className="fixed inset-0 z-40 md:hidden">
+          <div
+            className="absolute inset-0 bg-slate-900/40"
+            onClick={() => setOpen(false)}
+          />
+          <aside className="absolute left-0 top-0 flex h-full w-72 max-w-[80%] flex-col border-r border-slate-200 bg-white shadow-xl">
+            <div className="flex h-14 items-center justify-between border-b border-slate-100 px-5">
+              <Brand />
+              <button
+                onClick={() => setOpen(false)}
+                className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-100"
+                aria-label="Cerrar menú"
+              >
+                ✕
+              </button>
+            </div>
+            <NavGroups
+              role={role}
+              pathname={pathname}
+              onNavigate={() => setOpen(false)}
+            />
+          </aside>
+        </div>
+      )}
+
       {/* Main */}
-      <div className="flex flex-1 flex-col">
-        <header className="flex h-16 items-center justify-between border-b border-slate-200 bg-white px-6">
-          <div>
-            <p className="text-sm font-semibold text-slate-900">{tenantName}</p>
-            <p className="text-xs text-slate-400">Inmobiliaria · tenant activo</p>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="flex h-16 items-center justify-between gap-2 border-b border-slate-200 bg-white px-4 sm:px-6">
+          <div className="flex min-w-0 items-center gap-3">
+            <button
+              onClick={() => setOpen(true)}
+              className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 md:hidden"
+              aria-label="Abrir menú"
+            >
+              <span className="block text-lg leading-none">☰</span>
+            </button>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-slate-900">
+                {tenantName}
+              </p>
+              <p className="hidden text-xs text-slate-400 sm:block">
+                Inmobiliaria · tenant activo
+              </p>
+            </div>
           </div>
-          <div className="flex items-center gap-4">
-            <div className="text-right">
+          <div className="flex items-center gap-3">
+            <div className="hidden text-right sm:block">
               <p className="text-sm font-medium text-slate-800">{userName}</p>
               <p className="text-xs text-slate-400">{ROLE_LABELS[role]}</p>
             </div>
@@ -148,7 +211,7 @@ export function AppShell({
             </form>
           </div>
         </header>
-        <main className="flex-1 overflow-y-auto px-6 py-6">{children}</main>
+        <main className="flex-1 overflow-y-auto px-4 py-6 sm:px-6">{children}</main>
       </div>
     </div>
   );

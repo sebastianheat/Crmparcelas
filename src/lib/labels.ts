@@ -164,13 +164,17 @@ export const LEGAL_CASE_STATUS: Record<
   no_inicio: { label: "Facultad de no inicio", tone: "slate" },
 };
 
-// Tipos de documento del expediente del cliente (checklist).
+// Tipos de documento del expediente del cliente (checklist), alineados a los
+// expedientes reales ("PC n° - NOMBRE": reserva, vale vista, promesa, etc.).
 export const CLIENT_DOC_TYPES: { value: string; label: string; required: boolean }[] = [
   { value: "cedula", label: "Cédula de identidad", required: true },
-  { value: "comprobante_pago", label: "Comprobante de pago", required: true },
+  { value: "reserva", label: "Comprobante de reserva", required: true },
+  { value: "comprobante_pago", label: "Pago / cuotas", required: true },
   { value: "vale_vista", label: "Vale vista", required: false },
-  { value: "promesa", label: "Promesa firmada", required: true },
-  { value: "escritura", label: "Escritura", required: false },
+  { value: "promesa", label: "Promesa (PCV)", required: true },
+  { value: "escritura", label: "Escritura / inscripción", required: false },
+  { value: "contraescritura", label: "Contraescritura / rectificación", required: false },
+  { value: "resciliacion", label: "Resciliación", required: false },
   { value: "otro", label: "Otro", required: false },
 ];
 

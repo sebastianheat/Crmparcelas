@@ -846,15 +846,9 @@ export const leadActivities = pgTable(
 
 // ─── M2 — Carpeta digital del cliente (expediente documental) ─────────────────
 
-export const clientDocTypeEnum = pgEnum("client_doc_type", [
-  "cedula",
-  "comprobante_pago",
-  "vale_vista",
-  "promesa",
-  "escritura",
-  "otro",
-]);
-
+// Tipo de documento del cliente: texto libre (catálogo en labels CLIENT_DOC_TYPES),
+// alineado a los expedientes reales (reserva, vale vista, promesa, contraescritura,
+// resciliación, etc.).
 export const clientDocuments = pgTable(
   "client_documents",
   {
@@ -865,7 +859,7 @@ export const clientDocuments = pgTable(
     clientId: uuid("client_id")
       .notNull()
       .references(() => clients.id, { onDelete: "cascade" }),
-    type: clientDocTypeEnum("type").default("otro").notNull(),
+    type: text("type").default("otro").notNull(),
     title: text("title").notNull(),
     url: text("url").notNull(),
     mime: text("mime"),
