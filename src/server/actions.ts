@@ -38,7 +38,8 @@ import { DEFAULT_PROMESA_MATRIZ } from "@/lib/promesa-template";
 import { getDteProvider } from "@/lib/dte";
 import { renderDocumentDocx } from "@/lib/docx";
 import { getSignatureProvider } from "@/lib/signature";
-import { EVENT_TO_STATUS } from "@/lib/labels";
+import { EVENT_TO_STATUS, LEAD_STAGE } from "@/lib/labels";
+import { parseCsv } from "@/lib/csv";
 import { generateReservaPdf, renderDocumentPdf } from "@/lib/pdf";
 import { generatePromesaText } from "@/lib/promesa";
 import { storeFile } from "@/lib/storage";
@@ -1405,4 +1406,116 @@ export async function captureWebLead(formData: FormData) {
     }
   });
   redirect(`/p/${tenantSlug}/${projectSlug}?ok=1`);
+}
+
+// ─── Importación de leads desde CSV (export de GHL/Toscana u otro) ─────────────
+
+const norm = (s: string) =>
+  s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
+
+function buildStageMap(): Record<string, string> {
+  const m: Record<string, string> = {};
+  for (const [key, v] of Object.entries(LEAD_STAGE)) m[norm(v.label)] = key;
+  // Alias frecuentes de GHL/Toscana.
+  Object.assign(m, {
+    reservas: "reservas",
+    reserva: "reservas",
+    nuevo: "entrada",
+    entrada: "entrada",
+    ganado: "promesando",
+    promesando: "promesando",
+    "no interesado": "perdido",
+    descartado: "perdido",
+    perdido: "perdido",
+    lost: "perdido",
+  });
+  return m;
+}
+
+function mapSource(raw: string): string {
+  const s = norm(raw);
+  if (s.includes("whats")) return "whatsapp";
+  if (s.includes("insta")) return "instagram";
+  if (s.includes("face")) return "facebook";
+  if (s.includes("portal")) return "portal";
+  if (s.includes("refer")) return "referido";
+  if (s.includes("web") || s.includes("form") || s.includes("landing")) return "web";
+  return "otro";
+}
+
+/** Busca el índice de la primera columna cuyo encabezado contenga algún alias. */
+function findCol(headers: string[], aliases: string[]): number {
+  const H = headers.map(norm);
+  for (let i = 0; i < H.length; i++) {
+    if (aliases.some((a) => H[i] === a || H[i].includes(a))) return i;
+  }
+  return -1;
+}
+
+export async function importLeadsCsv(formData: FormData) {
+  await requirePermission("reservas:create");
+  const file = formData.get("file");
+  let text = String(formData.get("csvText") || "");
+  if (file instanceof File && file.size > 0) {
+    text = new TextDecoder().decode(new Uint8Array(await file.arrayBuffer()));
+  }
+  if (text.trim().length < 5) redirect("/app/importar?err=1");
+
+  const { headers, rows } = parseCsv(text);
+  if (headers.length === 0) redirect("/app/importar?err=1");
+
+  const iName = findCol(headers, ["name", "nombre", "contact name", "full name"]);
+  const iFirst = findCol(headers, ["first name", "nombres"]);
+  const iLast = findCol(headers, ["last name", "apellido", "apellidos"]);
+  const iPhone = findCol(headers, ["phone", "telefono", "celular", "mobile", "movil"]);
+  const iEmail = findCol(headers, ["email", "correo", "e-mail"]);
+  const iStage = findCol(headers, ["stage", "etapa", "pipeline stage", "estado"]);
+  const iSource = findCol(headers, ["source", "origen", "contact source"]);
+  const iValue = findCol(headers, ["value", "valor", "monto", "lead value", "opportunity value"]);
+
+  const stageMap = buildStageMap();
+  const cap = rows.slice(0, 3000);
+
+  let imported = 0;
+  let skipped = 0;
+  await withCurrentTenant(async (tx, { tenantId }) => {
+    const existing = await tx
+      .select({ phone: leads.phone, email: leads.email })
+      .from(leads);
+    const phones = new Set(existing.map((e) => e.phone).filter(Boolean));
+    const emails = new Set(
+      existing.map((e) => (e.email ? e.email.toLowerCase() : null)).filter(Boolean),
+    );
+
+    for (const r of cap) {
+      const get = (i: number) => (i >= 0 ? (r[i] ?? "").trim() : "");
+      const name =
+        get(iName) ||
+        [get(iFirst), get(iLast)].filter(Boolean).join(" ").trim();
+      if (!name || name.length < 2) { skipped++; continue; }
+      const phone = get(iPhone) || null;
+      const email = get(iEmail) || null;
+      if (phone && phones.has(phone)) { skipped++; continue; }
+      if (email && emails.has(email.toLowerCase())) { skipped++; continue; }
+
+      const stage = stageMap[norm(get(iStage))] ?? "entrada";
+      const source = iSource >= 0 ? mapSource(get(iSource)) : "otro";
+      const value = num(get(iValue));
+
+      await tx.insert(leads).values({
+        tenantId,
+        name,
+        phone,
+        email,
+        source: source as "web" | "whatsapp" | "instagram" | "facebook" | "portal" | "referido" | "otro",
+        stage,
+        estimatedValueClp: value,
+        notes: "Importado desde CSV",
+      });
+      if (phone) phones.add(phone);
+      if (email) emails.add(email.toLowerCase());
+      imported++;
+    }
+  });
+  redirect(`/app/importar?ok=${imported}&skip=${skipped}`);
 }

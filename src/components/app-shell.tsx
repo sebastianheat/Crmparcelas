@@ -21,6 +21,7 @@ const NAV: { section: string; items: NavItem[] }[] = [
     items: [
       { href: "/app", label: "Dashboard", icon: "▦" },
       { href: "/app/crm", label: "CRM y Embudo", icon: "◔" },
+      { href: "/app/importar", label: "Importar leads", icon: "↥" },
       { href: "/app/whatsapp", label: "Agente WhatsApp", icon: "◍" },
       { href: "/app/proyectos", label: "Proyectos y Stock", icon: "▤" },
       { href: "/app/clientes", label: "Clientes", icon: "◉" },
@@ -58,7 +59,9 @@ function canSee(role: Role, href: string): boolean {
       href !== "/app/conciliacion" &&
       href !== "/app/flujo-caja") ||
       can(role, "finance:read")) &&
-    ((href !== "/app/crm" && href !== "/app/whatsapp") ||
+    ((href !== "/app/crm" &&
+      href !== "/app/whatsapp" &&
+      href !== "/app/importar") ||
       can(role, "reservas:create")) &&
     (href !== "/app/reportes" ||
       can(role, "finance:read") ||
