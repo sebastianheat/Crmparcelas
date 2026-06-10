@@ -1,3 +1,4 @@
+import { BsaleDTEProvider } from "./bsale";
 import { MockDTEProvider } from "./mock";
 import type { DTEProvider } from "./provider";
 
@@ -9,12 +10,14 @@ export function getDteProvider(): DTEProvider {
   switch (provider) {
     case "mock":
       return new MockDTEProvider();
-    // TODO(Fase 1+): implementar OpenFactura / LibreDTE / SimpleAPI.
+    case "bsale":
+      return new BsaleDTEProvider();
+    // TODO: OpenFactura / LibreDTE / SimpleAPI si se requieren.
     case "openfactura":
     case "libredte":
     case "simpleapi":
       throw new Error(
-        `Proveedor DTE "${provider}" aún no implementado. Usa DTE_PROVIDER=mock.`,
+        `Proveedor DTE "${provider}" aún no implementado. Usa DTE_PROVIDER=bsale o mock.`,
       );
     default:
       return new MockDTEProvider();
