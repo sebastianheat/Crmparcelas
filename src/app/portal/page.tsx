@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import Link from "next/link";
+import { FintocPayButton } from "@/components/fintoc-pay-button";
 import { formatClp } from "@/lib/money";
 import { getPortalData, verifyPortalToken } from "@/lib/portal";
 
@@ -35,6 +36,7 @@ export default async function PortalPage() {
   }
 
   const { client, parcels, cuotas, documents } = data;
+  const fintocPk = process.env.FINTOC_PUBLIC_KEY || "";
   const pagado = cuotas
     .filter((c) => c.status === "pagada")
     .reduce((a, c) => a + Number(c.amountClp), 0);
@@ -90,6 +92,7 @@ export default async function PortalPage() {
                   <th className="px-4 py-2 font-medium">Vence</th>
                   <th className="px-4 py-2 text-right font-medium">Monto</th>
                   <th className="px-4 py-2 font-medium">Estado</th>
+                  {fintocPk && <th className="px-4 py-2" />}
                 </tr>
               </thead>
               <tbody>
@@ -113,6 +116,13 @@ export default async function PortalPage() {
                         {c.status === "pagada" ? "Pagada" : c.overdue ? "Vencida" : "Pendiente"}
                       </span>
                     </td>
+                    {fintocPk && (
+                      <td className="px-4 py-2">
+                        {c.status !== "pagada" && (
+                          <FintocPayButton installmentId={c.id} publicKey={fintocPk} />
+                        )}
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

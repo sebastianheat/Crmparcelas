@@ -1735,3 +1735,51 @@ export async function cloneGhl(formData: FormData) {
   revalidatePath("/app/integraciones");
   redirect(`/app/integraciones?clone=${encodeURIComponent(summary || "ok")}`);
 }
+
+// ─── Pago de cuota desde el Portal del Cliente (Fintoc widget) ────────────────
+
+export async function createPortalCuotaPayment(
+  installmentId: string,
+): Promise<{ widgetToken?: string; error?: string }> {
+  const { cookies } = await import("next/headers");
+  const { verifyPortalToken } = await import("@/lib/portal");
+  const token = (await cookies()).get("portal")?.value;
+  const payload = verifyPortalToken(token);
+  if (!payload) return { error: "Sesión del portal inválida." };
+
+  try {
+    return await withTenant(payload.tenantId, async (tx) => {
+      const inst = await tx.query.installments.findFirst({
+        where: eq(installments.id, installmentId),
+      });
+      if (!inst || inst.status === "pagada") return { error: "Cuota no disponible." };
+      const parcel = await tx.query.parcels.findFirst({
+        where: eq(parcels.id, inst.parcelId),
+        columns: { currentClientId: true },
+      });
+      // El cliente del portal solo puede pagar sus propias cuotas.
+      if (!parcel || parcel.currentClientId !== payload.clientId)
+        return { error: "No autorizado." };
+
+      const { fintoc } = await import("@/lib/fintoc");
+      const pi = await fintoc.createPaymentIntent({
+        amountClp: Number(inst.amountClp),
+        metadata: { tenantId: payload.tenantId, installmentId, parcelId: inst.parcelId },
+      });
+      await tx.insert(paymentIntents).values({
+        tenantId: payload.tenantId,
+        provider: "fintoc",
+        externalId: pi.id,
+        installmentId,
+        parcelId: inst.parcelId,
+        amountClp: inst.amountClp,
+        status: pi.status || "pending",
+        widgetToken: pi.widget_token ?? null,
+      });
+      return { widgetToken: pi.widget_token };
+    });
+  } catch (e) {
+    console.error("[portal] pago fintoc", e);
+    return { error: "No se pudo iniciar el pago." };
+  }
+}
