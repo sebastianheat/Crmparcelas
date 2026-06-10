@@ -141,6 +141,13 @@
       "when": 1781055170463,
       "tag": "0019_calm_boomer",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1781056439178,
+      "tag": "0020_shocking_senator_kelly",
+      "breakpoints": true
     }
   ]
 }

@@ -1,8 +1,11 @@
 import { Badge, Button, Card, CardHeader, EmptyState, Field, Input } from "@/components/ui";
 import { can } from "@/lib/roles";
 import { requireSession } from "@/lib/session";
-import { saveGhlConfig, syncGhlLeads, testGhlConnection } from "@/server/actions";
-import { getGhlIntegration } from "@/server/queries";
+import { cloneGhl, saveGhlConfig, syncGhlLeads, testGhlConnection } from "@/server/actions";
+import { getCloneStatus, getGhlIntegration } from "@/server/queries";
+
+// El clonado puede tardar (paginación de la API). Vercel Pro permite hasta 300s.
+export const maxDuration = 300;
 
 export default async function IntegrationsPage({
   searchParams,
@@ -17,10 +20,15 @@ export default async function IntegrationsPage({
     );
   }
   const sp = await searchParams;
-  const { configured, locationId, lastSyncAt } = await getGhlIntegration();
+  const [{ configured, locationId, lastSyncAt }, clone] = await Promise.all([
+    getGhlIntegration(),
+    getCloneStatus(),
+  ]);
 
   const banner =
-    sp?.saved === "1"
+    typeof sp?.clone === "string"
+      ? { tone: "ok", msg: `Clonado: ${sp.clone}` }
+      : sp?.saved === "1"
       ? { tone: "ok", msg: "Configuración guardada." }
       : sp?.test === "ok"
         ? { tone: "ok", msg: `Conexión OK · ${sp.pipelines ?? 0} pipeline(s) detectados.` }
@@ -105,6 +113,55 @@ export default async function IntegrationsPage({
           </div>
         )}
       </Card>
+
+      {configured && (
+        <Card>
+          <CardHeader
+            title="Clonar todo desde GHL"
+            subtitle="Extracción completa (one-time). Córrela por etapas; es resumible e idempotente."
+          />
+          <div className="space-y-4 p-5">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {[
+                ["Contactos", clone.counts.contacts ?? 0],
+                ["Oportunidades", clone.counts.opportunities ?? 0],
+                ["Conversaciones", clone.counts.conversations ?? 0],
+                ["Mensajes", clone.counts.messages ?? 0],
+                ["Clientes (5000)", clone.clientCount],
+                ["Leads (5000)", clone.leadCount],
+                ["Usuarios", clone.counts.users ?? 0],
+                ["Campos/Tags", (clone.counts.custom_fields ?? 0) + (clone.counts.tags ?? 0)],
+              ].map(([label, n]) => (
+                <div key={label as string} className="rounded-lg border border-slate-100 p-3">
+                  <p className="text-xs text-slate-400">{label}</p>
+                  <p className="text-lg font-bold text-slate-900">{n as number}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {[
+                ["core", "1) Contactos + Oportunidades"],
+                ["conversations", "2) Conversaciones"],
+                ["messages", "3) Mensajes (lote)"],
+                ["config", "4) Usuarios / campos / tags"],
+              ].map(([kind, label]) => (
+                <form key={kind} action={cloneGhl}>
+                  <input type="hidden" name="kind" value={kind} />
+                  <Button type="submit" variant="secondary">
+                    {label}
+                  </Button>
+                </form>
+              ))}
+            </div>
+            <p className="text-xs text-slate-400">
+              El paso 3 (mensajes) procesa ~40 conversaciones por clic — repítelo
+              hasta que el contador deje de subir. Todo queda guardado en crudo
+              como base, además de mapear contactos→clientes y oportunidades→leads.
+            </p>
+          </div>
+        </Card>
+      )}
 
       <Card>
         <CardHeader title="Cómo obtener el token" />

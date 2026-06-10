@@ -846,6 +846,29 @@ export const leadActivities = pgTable(
   ],
 );
 
+// ─── Clonado de fuentes externas — snapshots crudos (base completa) ───────────
+
+export const ghlSnapshots = pgTable(
+  "ghl_snapshots",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(), // contacts | conversations | messages | opportunities | ...
+    externalId: text("external_id").notNull(),
+    parentId: text("parent_id"), // ej. conversationId para messages
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+    fetchedAt: timestamp("fetched_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    index("ghl_snapshots_tenant_kind_idx").on(t.tenantId, t.kind),
+    uniqueIndex("ghl_snapshots_uk").on(t.tenantId, t.kind, t.externalId),
+  ],
+);
+
 // ─── Integraciones externas (GHL/LeadConnector, etc.) por tenant ──────────────
 
 export const integrations = pgTable(
@@ -1112,6 +1135,7 @@ export type ClientDocument = typeof clientDocuments.$inferSelect;
 export type Lead = typeof leads.$inferSelect;
 export type LeadActivity = typeof leadActivities.$inferSelect;
 export type Integration = typeof integrations.$inferSelect;
+export type GhlSnapshot = typeof ghlSnapshots.$inferSelect;
 export type Acquisition = NonNullable<Project["acquisition"]>;
 
 /** Tablas de negocio sujetas a Row-Level Security por tenant. */
@@ -1136,6 +1160,7 @@ export const TENANT_SCOPED_TABLES = [
   "bank_movements",
   "client_documents",
   "integrations",
+  "ghl_snapshots",
 ] as const;
 
 export { sql };

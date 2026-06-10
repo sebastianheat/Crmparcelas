@@ -1,10 +1,11 @@
-import { and, desc, eq, inArray, lte, sum } from "drizzle-orm";
+import { and, count, desc, eq, inArray, lte, sum } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import {
   clients,
   bankMovements,
   clientDocuments,
   costs,
+  ghlSnapshots,
   installments,
   integrations,
   leadActivities,
@@ -364,6 +365,20 @@ export function getCommissions() {
 }
 
 // ─── CRM — Leads y embudo ─────────────────────────────────────────────────────
+
+export function getCloneStatus() {
+  return withCurrentTenant(async (tx) => {
+    const rows = await tx
+      .select({ kind: ghlSnapshots.kind, n: count() })
+      .from(ghlSnapshots)
+      .groupBy(ghlSnapshots.kind);
+    const counts: Record<string, number> = {};
+    for (const r of rows) counts[r.kind] = Number(r.n);
+    const [{ n: clientCount }] = await tx.select({ n: count() }).from(clients);
+    const [{ n: leadCount }] = await tx.select({ n: count() }).from(leads);
+    return { counts, clientCount: Number(clientCount), leadCount: Number(leadCount) };
+  });
+}
 
 export function getGhlIntegration() {
   return withCurrentTenant(async (tx) => {

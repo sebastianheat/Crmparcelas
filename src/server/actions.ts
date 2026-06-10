@@ -14,6 +14,7 @@ import {
   clientDocuments,
   clients,
   costs,
+  ghlSnapshots,
   installments,
   integrations,
   invoices,
@@ -1642,4 +1643,154 @@ export async function syncGhlLeads() {
   });
   revalidatePath("/app/crm");
   redirect(`/app/integraciones?sync=${result}&new=${synced}&upd=${updated}`);
+}
+
+// ─── Clonado masivo desde GHL (one-time, por etapas, resumible) ───────────────
+
+async function upsertSnapshot(
+  tx: TenantDbForActions,
+  tenantId: string,
+  kind: string,
+  externalId: string,
+  payload: Record<string, unknown>,
+  parentId?: string,
+) {
+  await tx
+    .insert(ghlSnapshots)
+    .values({ tenantId, kind, externalId, parentId: parentId ?? null, payload })
+    .onConflictDoUpdate({
+      target: [ghlSnapshots.tenantId, ghlSnapshots.kind, ghlSnapshots.externalId],
+      set: { payload, fetchedAt: new Date() },
+    });
+}
+
+export async function cloneGhl(formData: FormData) {
+  await requirePermission("settings:write");
+  const kind = String(formData.get("kind") || "core");
+  let summary = "";
+  await withCurrentTenant(async (tx, { tenantId }) => {
+    const client = await getGhlClient(tx);
+    if (!client) { summary = "nocfg"; return; }
+
+    if (kind === "core") {
+      // Contactos → snapshots + clientes (dedupe por email/teléfono).
+      const contacts = await client.allContacts();
+      const existingClients = await tx
+        .select({ email: clients.email, phone: clients.phone })
+        .from(clients);
+      const emails = new Set(existingClients.map((c) => c.email?.toLowerCase()).filter(Boolean));
+      const phones = new Set(existingClients.map((c) => c.phone).filter(Boolean));
+      let newClients = 0;
+      for (const c of contacts) {
+        const id = String(c.id ?? "");
+        if (!id) continue;
+        await upsertSnapshot(tx, tenantId, "contacts", id, c);
+        const email = (c.email as string) || null;
+        const phone = (c.phone as string) || null;
+        const name =
+          (c.contactName as string) ||
+          [c.firstName, c.lastName].filter(Boolean).join(" ").trim() ||
+          (c.name as string) || "";
+        if (name.length < 2) continue;
+        if (email && emails.has(email.toLowerCase())) continue;
+        if (phone && phones.has(phone)) continue;
+        await tx.insert(clients).values({
+          tenantId,
+          name,
+          email,
+          phone,
+          direccion: (c.address1 as string) || null,
+        });
+        if (email) emails.add(email.toLowerCase());
+        if (phone) phones.add(phone);
+        newClients++;
+      }
+
+      // Pipelines + oportunidades → snapshots + leads (idempotente por externalId).
+      const pipelines = await client.pipelines();
+      const stageName = new Map<string, string>();
+      for (const p of pipelines) {
+        await upsertSnapshot(tx, tenantId, "pipelines", p.id, p as unknown as Record<string, unknown>);
+        for (const s of p.stages) stageName.set(s.id, s.name);
+      }
+      const opps = await client.allOpportunities();
+      const stageMap = buildStageMap();
+      const existingLeads = await tx
+        .select({ id: leads.id, externalId: leads.externalId })
+        .from(leads);
+      const byExt = new Map(existingLeads.filter((e) => e.externalId).map((e) => [e.externalId!, e.id]));
+      let newLeads = 0;
+      for (const o of opps) {
+        await upsertSnapshot(tx, tenantId, "opportunities", o.id, o as unknown as Record<string, unknown>);
+        const c = o.contact ?? {};
+        const externalId = c.id ?? o.id;
+        const stage = stageMap[norm(stageName.get(o.pipelineStageId ?? "") ?? "")] ?? "entrada";
+        const value = o.monetaryValue ? String(Math.round(o.monetaryValue)) : null;
+        const found = byExt.get(externalId);
+        if (found) {
+          await tx.update(leads).set({ stage, estimatedValueClp: value, updatedAt: new Date() }).where(eq(leads.id, found));
+        } else {
+          await tx.insert(leads).values({
+            tenantId,
+            name: (c.name || o.name || "Sin nombre").trim(),
+            phone: c.phone || null,
+            email: c.email || null,
+            source: (o.source ? mapSource(o.source) : "otro") as "web" | "whatsapp" | "instagram" | "facebook" | "portal" | "referido" | "otro",
+            stage,
+            estimatedValueClp: value,
+            externalId,
+            notes: "Clonado desde GHL",
+          });
+          byExt.set(externalId, "x");
+          newLeads++;
+        }
+      }
+      summary = `core ${contacts.length} contactos (${newClients} clientes nuevos), ${opps.length} oportunidades (${newLeads} leads nuevos)`;
+    } else if (kind === "conversations") {
+      const convs = await client.allConversations();
+      for (const c of convs) {
+        const id = String(c.id ?? "");
+        if (id) await upsertSnapshot(tx, tenantId, "conversations", id, c);
+      }
+      summary = `${convs.length} conversaciones`;
+    } else if (kind === "messages") {
+      // Procesa un lote de conversaciones que aún no tengan mensajes clonados.
+      const convs = await tx.query.ghlSnapshots.findMany({
+        where: eq(ghlSnapshots.kind, "conversations"),
+        limit: 400,
+      });
+      const withMsgs = new Set(
+        (
+          await tx
+            .select({ parentId: ghlSnapshots.parentId })
+            .from(ghlSnapshots)
+            .where(eq(ghlSnapshots.kind, "messages"))
+        ).map((m) => m.parentId).filter(Boolean),
+      );
+      const pending = convs.filter((c) => !withMsgs.has(c.externalId)).slice(0, 40);
+      let msgCount = 0;
+      for (const conv of pending) {
+        const msgs = await client.messages(conv.externalId);
+        for (const m of msgs) {
+          const mid = String(m.id ?? `${conv.externalId}-${msgCount}`);
+          await upsertSnapshot(tx, tenantId, "messages", mid, m, conv.externalId);
+          msgCount++;
+        }
+        // Marca la conversación como procesada aunque no tenga mensajes.
+        if (msgs.length === 0)
+          await upsertSnapshot(tx, tenantId, "messages", `empty-${conv.externalId}`, { empty: true }, conv.externalId);
+      }
+      summary = `${pending.length} conversaciones procesadas, ${msgCount} mensajes (quedan ${convs.length - withMsgs.size - pending.length})`;
+    } else if (kind === "config") {
+      for (const u of await client.users()) if (u.id) await upsertSnapshot(tx, tenantId, "users", String(u.id), u);
+      for (const f of await client.customFields()) if (f.id) await upsertSnapshot(tx, tenantId, "custom_fields", String(f.id), f);
+      for (const t of await client.tags()) if (t.id || t.name) await upsertSnapshot(tx, tenantId, "tags", String(t.id ?? t.name), t);
+      for (const c of await client.calendars()) if (c.id) await upsertSnapshot(tx, tenantId, "calendars", String(c.id), c);
+      summary = "config (usuarios, campos, tags, calendarios)";
+    }
+
+    await tx.update(integrations).set({ lastSyncAt: new Date() }).where(eq(integrations.provider, "ghl"));
+  });
+  revalidatePath("/app/integraciones");
+  redirect(`/app/integraciones?clone=${encodeURIComponent(summary || "ok")}`);
 }
