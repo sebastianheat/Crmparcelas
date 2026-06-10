@@ -7,13 +7,15 @@ import { and, desc, eq, isNotNull, max } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
 import { db } from "@/db/client";
-import { withTenant } from "@/db/tenant";
+import { withTenant, type TenantDb } from "@/db/tenant";
+type TenantDbForActions = TenantDb;
 import {
   bankMovements,
   clientDocuments,
   clients,
   costs,
   installments,
+  integrations,
   invoices,
   leadActivities,
   leads,
@@ -1518,4 +1520,126 @@ export async function importLeadsCsv(formData: FormData) {
     }
   });
   redirect(`/app/importar?ok=${imported}&skip=${skipped}`);
+}
+
+// ─── Integración GHL / LeadConnector (sincronización vía API) ──────────────────
+
+export async function saveGhlConfig(formData: FormData) {
+  await requirePermission("settings:write");
+  const token = String(formData.get("token") || "").trim();
+  const locationId = String(formData.get("locationId") || "").trim();
+  if (!token || !locationId) redirect("/app/integraciones?err=cfg");
+  await withCurrentTenant(async (tx, { tenantId }) => {
+    await tx
+      .insert(integrations)
+      .values({ tenantId, provider: "ghl", config: { token, locationId } })
+      .onConflictDoUpdate({
+        target: [integrations.tenantId, integrations.provider],
+        set: { config: { token, locationId }, updatedAt: new Date() },
+      });
+  });
+  redirect("/app/integraciones?saved=1");
+}
+
+async function getGhlClient(tx: TenantDbForActions) {
+  const cfg = await tx.query.integrations.findFirst({
+    where: eq(integrations.provider, "ghl"),
+  });
+  const token = cfg?.config?.token;
+  const locationId = cfg?.config?.locationId;
+  if (!token || !locationId) return null;
+  const { GhlClient } = await import("@/lib/ghl");
+  return new GhlClient(token, locationId);
+}
+
+export async function testGhlConnection() {
+  await requirePermission("settings:write");
+  let result = "err";
+  let n = 0;
+  await withCurrentTenant(async (tx) => {
+    const client = await getGhlClient(tx);
+    if (!client) return;
+    try {
+      const p = await client.pipelines();
+      n = p.length;
+      result = "ok";
+    } catch (e) {
+      console.error("[ghl] test", e);
+    }
+  });
+  redirect(`/app/integraciones?test=${result}&pipelines=${n}`);
+}
+
+export async function syncGhlLeads() {
+  await requirePermission("reservas:create");
+  let synced = 0;
+  let updated = 0;
+  let result = "ok";
+  await withCurrentTenant(async (tx, { tenantId }) => {
+    const client = await getGhlClient(tx);
+    if (!client) {
+      result = "nocfg";
+      return;
+    }
+    try {
+      const pipelines = await client.pipelines();
+      const stageName = new Map<string, string>();
+      for (const p of pipelines)
+        for (const s of p.stages) stageName.set(s.id, s.name);
+
+      const opps = await client.allOpportunities();
+      const stageMap = buildStageMap();
+
+      const existing = await tx
+        .select({ id: leads.id, externalId: leads.externalId })
+        .from(leads);
+      const byExt = new Map(
+        existing.filter((e) => e.externalId).map((e) => [e.externalId!, e.id]),
+      );
+
+      for (const o of opps) {
+        const c = o.contact ?? {};
+        const externalId = c.id ?? o.id;
+        const name = (c.name || o.name || "Sin nombre").trim();
+        const phone = c.phone || null;
+        const email = c.email || null;
+        const stage =
+          stageMap[norm(stageName.get(o.pipelineStageId ?? "") ?? "")] ?? "entrada";
+        const source = o.source ? mapSource(o.source) : "otro";
+        const value = o.monetaryValue ? String(Math.round(o.monetaryValue)) : null;
+
+        const found = byExt.get(externalId);
+        if (found) {
+          await tx
+            .update(leads)
+            .set({ stage, estimatedValueClp: value, phone, email, updatedAt: new Date() })
+            .where(eq(leads.id, found));
+          updated++;
+        } else {
+          await tx.insert(leads).values({
+            tenantId,
+            name,
+            phone,
+            email,
+            source: source as "web" | "whatsapp" | "instagram" | "facebook" | "portal" | "referido" | "otro",
+            stage,
+            estimatedValueClp: value,
+            externalId,
+            notes: "Sincronizado desde GHL",
+          });
+          byExt.set(externalId, "x");
+          synced++;
+        }
+      }
+      await tx
+        .update(integrations)
+        .set({ lastSyncAt: new Date() })
+        .where(eq(integrations.provider, "ghl"));
+    } catch (e) {
+      console.error("[ghl] sync", e);
+      result = "err";
+    }
+  });
+  revalidatePath("/app/crm");
+  redirect(`/app/integraciones?sync=${result}&new=${synced}&upd=${updated}`);
 }

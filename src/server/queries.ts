@@ -6,6 +6,7 @@ import {
   clientDocuments,
   costs,
   installments,
+  integrations,
   leadActivities,
   leads,
   legalCases,
@@ -363,6 +364,19 @@ export function getCommissions() {
 }
 
 // ─── CRM — Leads y embudo ─────────────────────────────────────────────────────
+
+export function getGhlIntegration() {
+  return withCurrentTenant(async (tx) => {
+    const row = await tx.query.integrations.findFirst({
+      where: eq(integrations.provider, "ghl"),
+    });
+    return {
+      configured: Boolean(row?.config?.token),
+      locationId: row?.config?.locationId ?? "",
+      lastSyncAt: row?.lastSyncAt ?? null,
+    };
+  });
+}
 
 export function listLeads() {
   return withCurrentTenant(async (tx) => {

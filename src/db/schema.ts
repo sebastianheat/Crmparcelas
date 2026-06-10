@@ -802,6 +802,8 @@ export const leads = pgTable(
     lostReason: text("lost_reason"),
     lastContactAt: timestamp("last_contact_at", { withTimezone: true }),
     reminderSentAt: timestamp("reminder_sent_at", { withTimezone: true }),
+    // ID del contacto/oportunidad en una fuente externa (ej. GHL) para upsert.
+    externalId: text("external_id"),
     createdByUserId: uuid("created_by_user_id").references(() => users.id, {
       onDelete: "set null",
     }),
@@ -841,6 +843,30 @@ export const leadActivities = pgTable(
   (t) => [
     index("lead_activities_tenant_idx").on(t.tenantId),
     index("lead_activities_lead_idx").on(t.leadId),
+  ],
+);
+
+// ─── Integraciones externas (GHL/LeadConnector, etc.) por tenant ──────────────
+
+export const integrations = pgTable(
+  "integrations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    provider: text("provider").notNull(), // 'ghl'
+    config: jsonb("config").$type<Record<string, string>>().default({}),
+    lastSyncAt: timestamp("last_sync_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    uniqueIndex("integrations_tenant_provider_uk").on(t.tenantId, t.provider),
   ],
 );
 
@@ -1085,6 +1111,7 @@ export type BankMovement = typeof bankMovements.$inferSelect;
 export type ClientDocument = typeof clientDocuments.$inferSelect;
 export type Lead = typeof leads.$inferSelect;
 export type LeadActivity = typeof leadActivities.$inferSelect;
+export type Integration = typeof integrations.$inferSelect;
 export type Acquisition = NonNullable<Project["acquisition"]>;
 
 /** Tablas de negocio sujetas a Row-Level Security por tenant. */
@@ -1108,6 +1135,7 @@ export const TENANT_SCOPED_TABLES = [
   "lead_activities",
   "bank_movements",
   "client_documents",
+  "integrations",
 ] as const;
 
 export { sql };

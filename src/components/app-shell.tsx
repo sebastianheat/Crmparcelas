@@ -22,6 +22,7 @@ const NAV: { section: string; items: NavItem[] }[] = [
       { href: "/app", label: "Dashboard", icon: "▦" },
       { href: "/app/crm", label: "CRM y Embudo", icon: "◔" },
       { href: "/app/importar", label: "Importar leads", icon: "↥" },
+      { href: "/app/integraciones", label: "Integraciones", icon: "⧉" },
       { href: "/app/whatsapp", label: "Agente WhatsApp", icon: "◍" },
       { href: "/app/proyectos", label: "Proyectos y Stock", icon: "▤" },
       { href: "/app/clientes", label: "Clientes", icon: "◉" },
@@ -53,7 +54,8 @@ function canSee(role: Role, href: string): boolean {
     (href !== "/app/equipo" || can(role, "users:manage")) &&
     ((href !== "/app/sociedades" &&
       href !== "/app/matrices" &&
-      href !== "/app/legal") ||
+      href !== "/app/legal" &&
+      href !== "/app/integraciones") ||
       can(role, "settings:write")) &&
     ((href !== "/app/comisiones" &&
       href !== "/app/conciliacion" &&
