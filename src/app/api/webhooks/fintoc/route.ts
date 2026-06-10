@@ -1,8 +1,10 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
+import { db } from "@/db/client";
 import { paymentIntents } from "@/db/schema";
 import { withTenant } from "@/db/tenant";
+import { syncBankForTenant } from "@/lib/bank/sync";
 import { payInstallment } from "@/lib/cobranza";
 
 /** Verifica la firma `Fintoc-Signature` (esquema t=…,v1=… tipo Stripe). */
@@ -57,6 +59,17 @@ export async function POST(req: Request) {
           });
         }
       });
+    }
+  }
+
+  // El banco terminó de refrescar → sincroniza y concilia movimientos solo.
+  if (type === "account.refresh_intent.succeeded" || type === "link.refreshed") {
+    const tenantId =
+      process.env.FINTOC_TENANT_ID ?? (await db.query.tenants.findFirst())?.id;
+    if (tenantId) {
+      await withTenant(tenantId, (tx) => syncBankForTenant(tx, tenantId)).catch(
+        (e) => console.error("[fintoc] auto-sync", e),
+      );
     }
   }
 
