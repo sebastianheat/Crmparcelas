@@ -58,28 +58,14 @@ class MockBankProvider implements BankProvider {
   }
 }
 
-/** Adaptador Fintoc (open banking Chile). */
+/** Adaptador Fintoc (open banking Chile) — usa el cliente src/lib/fintoc.ts. */
 class FintocBankProvider implements BankProvider {
   readonly name = "fintoc";
   async listMovements(opts?: { since?: Date }): Promise<BankMovementInput[]> {
-    const key = process.env.FINTOC_SECRET_KEY;
-    const linkToken = process.env.FINTOC_LINK_TOKEN;
-    const accountId = process.env.FINTOC_ACCOUNT_ID;
-    if (!key || !linkToken || !accountId) {
-      throw new Error(
-        "Fintoc no configurado: define FINTOC_SECRET_KEY, FINTOC_LINK_TOKEN y FINTOC_ACCOUNT_ID.",
-      );
-    }
-    const params = new URLSearchParams({ link_token: linkToken, per_page: "100" });
-    if (opts?.since) params.set("since", opts.since.toISOString().slice(0, 10));
-    const res = await fetch(
-      `https://api.fintoc.com/v1/accounts/${accountId}/movements?${params}`,
-      { headers: { Authorization: key } },
-    );
-    if (!res.ok) {
-      throw new Error(`Fintoc error ${res.status}: ${await res.text()}`);
-    }
-    const data = (await res.json()) as FintocMovement[];
+    const { fintoc } = await import("@/lib/fintoc");
+    const data = await fintoc.movements({
+      since: opts?.since ? opts.since.toISOString().slice(0, 10) : undefined,
+    });
     return data.map((m) => ({
       externalId: m.id,
       postedAt: new Date(m.post_date ?? m.transaction_date),
@@ -87,22 +73,14 @@ class FintocBankProvider implements BankProvider {
       amountClp: Number(m.amount),
       description: m.description ?? undefined,
       counterparty:
-        m.sender_account?.holder_id ?? m.recipient_account?.holder_id ?? undefined,
+        m.sender_account?.holder_name ??
+        m.sender_account?.holder_id ??
+        m.recipient_account?.holder_name ??
+        undefined,
       raw: m as unknown as Record<string, unknown>,
     }));
   }
 }
-
-type FintocMovement = {
-  id: string;
-  amount: number;
-  currency: string;
-  post_date?: string;
-  transaction_date: string;
-  description?: string;
-  sender_account?: { holder_id?: string };
-  recipient_account?: { holder_id?: string };
-};
 
 export function getBankProvider(): BankProvider {
   switch (process.env.BANK_PROVIDER ?? "mock") {

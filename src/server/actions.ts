@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { hash } from "bcryptjs";
-import { and, desc, eq, isNotNull, max } from "drizzle-orm";
+import { desc, eq, max } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
 import { db } from "@/db/client";
@@ -26,6 +26,7 @@ import {
   parcelDocuments,
   parcelEvents,
   parcels,
+  paymentIntents,
   paymentPlans,
   projectDocuments,
   projects,
@@ -47,6 +48,7 @@ import { generateReservaPdf, renderDocumentPdf } from "@/lib/pdf";
 import { generatePromesaText } from "@/lib/promesa";
 import { storeFile } from "@/lib/storage";
 import { getBankProvider } from "@/lib/bank";
+import { payInstallment } from "@/lib/cobranza";
 import { handleInboundWhatsApp } from "@/lib/whatsapp/agent";
 import { runRemindersForTenant } from "@/lib/reminders";
 import { ASSIGNABLE_ROLES } from "@/lib/roles";
@@ -953,50 +955,50 @@ export async function markInstallmentPaid(formData: FormData) {
   await withCurrentTenant(async (tx, { tenantId, userId }) => {
     const inst = await tx.query.installments.findFirst({
       where: eq(installments.id, installmentId),
+      columns: { parcelId: true },
     });
-    if (!inst) throw new Error("Cuota no encontrada.");
-    parcelId = inst.parcelId;
-    const parcel = await tx.query.parcels.findFirst({
-      where: eq(parcels.id, inst.parcelId),
-      columns: { code: true, projectId: true },
-    });
-    if (!parcel) throw new Error("Parcela no encontrada.");
-
-    // Vendedor responsable (de la reserva/venta) para atribuir la comisión.
-    const sale = await tx.query.parcelEvents.findFirst({
-      where: and(
-        eq(parcelEvents.parcelId, inst.parcelId),
-        isNotNull(parcelEvents.sellerUserId),
-      ),
-      orderBy: desc(parcelEvents.createdAt),
-      columns: { sellerUserId: true },
-    });
-
-    // Comprobante de dinero por la cuota (entra a prefacturación).
-    const [{ value: lastFolio }] = await tx
-      .select({ value: max(moneyVouchers.folio) })
-      .from(moneyVouchers);
-    const [voucher] = await tx
-      .insert(moneyVouchers)
-      .values({
-        tenantId,
-        projectId: parcel.projectId,
-        parcelId: inst.parcelId,
-        folio: (lastFolio ?? 0) + 1,
-        concept: `Cuota ${inst.number} parcela ${parcel.code}`,
-        amountClp: inst.amountClp,
-        sellerUserId: sale?.sellerUserId ?? null,
-        createdByUserId: userId,
-      })
-      .returning();
-
-    await tx
-      .update(installments)
-      .set({ status: "pagada", paidAt: new Date(), voucherId: voucher.id })
-      .where(eq(installments.id, installmentId));
+    parcelId = inst?.parcelId ?? "";
+    await payInstallment(tx, tenantId, installmentId, { userId });
   });
   if (parcelId) revalidatePath(`/app/parcelas/${parcelId}`);
   revalidatePath("/app/cobranza");
+}
+
+// ─── Cobros con Fintoc (payment intents) ──────────────────────────────────────
+
+export async function createCuotaPaymentLink(formData: FormData) {
+  await requirePermission("billing:write");
+  const installmentId = String(formData.get("installmentId"));
+  await withCurrentTenant(async (tx, { tenantId, userId }) => {
+    const inst = await tx.query.installments.findFirst({
+      where: eq(installments.id, installmentId),
+    });
+    if (!inst) throw new Error("Cuota no encontrada.");
+    const { fintoc } = await import("@/lib/fintoc");
+    const pi = await fintoc.createPaymentIntent({
+      amountClp: Number(inst.amountClp),
+      metadata: { tenantId, installmentId, parcelId: inst.parcelId },
+    });
+    await tx.insert(paymentIntents).values({
+      tenantId,
+      provider: "fintoc",
+      externalId: pi.id,
+      installmentId,
+      parcelId: inst.parcelId,
+      amountClp: inst.amountClp,
+      status: pi.status || "pending",
+      widgetToken: pi.widget_token ?? null,
+      createdByUserId: userId,
+    });
+  });
+  revalidatePath("/app/cobranza");
+}
+
+export async function refreshFintoc() {
+  await requirePermission("finance:write");
+  const { fintoc } = await import("@/lib/fintoc");
+  await fintoc.refreshIntent();
+  revalidatePath("/app/conciliacion");
 }
 
 // ─── Causas legales (querellas / denuncias) ───────────────────────────────────

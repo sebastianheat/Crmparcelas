@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { neon } from "@neondatabase/serverless";
 const sql = neon(process.env.NEON!);
 const TOKEN=process.env.GHL_TOKEN!, LOC=process.env.GHL_LOC!, BASE="https://services.leadconnectorhq.com";

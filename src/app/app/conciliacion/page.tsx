@@ -12,6 +12,7 @@ import { requireSession } from "@/lib/session";
 import {
   ignoreMovement,
   reconcileMovement,
+  refreshFintoc,
   syncBankMovements,
 } from "@/server/actions";
 import { getConciliacion } from "@/server/queries";
@@ -42,9 +43,18 @@ export default async function ConciliacionPage() {
           </p>
         </div>
         {canWrite && (
-          <form action={syncBankMovements}>
-            <Button type="submit">↻ Sincronizar banco</Button>
-          </form>
+          <div className="flex gap-2">
+            {connected && (
+              <form action={refreshFintoc}>
+                <Button type="submit" variant="secondary">
+                  Refrescar (Fintoc)
+                </Button>
+              </form>
+            )}
+            <form action={syncBankMovements}>
+              <Button type="submit">↻ Sincronizar banco</Button>
+            </form>
+          </div>
         )}
       </div>
 

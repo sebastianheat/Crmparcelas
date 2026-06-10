@@ -148,6 +148,13 @@
       "when": 1781056439178,
       "tag": "0020_shocking_senator_kelly",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1781058027495,
+      "tag": "0021_careful_purple_man",
+      "breakpoints": true
     }
   ]
 }

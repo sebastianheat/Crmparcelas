@@ -925,6 +925,40 @@ export const clientDocuments = pgTable(
   ],
 );
 
+// ─── M3 — Intenciones de pago (cobro de cuotas vía Fintoc) ────────────────────
+
+export const paymentIntents = pgTable(
+  "payment_intents",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    provider: text("provider").notNull().default("fintoc"),
+    externalId: text("external_id"), // id del payment_intent en Fintoc
+    installmentId: uuid("installment_id").references(() => installments.id, {
+      onDelete: "set null",
+    }),
+    parcelId: uuid("parcel_id").references(() => parcels.id, {
+      onDelete: "set null",
+    }),
+    amountClp: numeric("amount_clp", { precision: 14, scale: 2 }).notNull(),
+    status: text("status").default("pending").notNull(), // pending | succeeded | failed
+    widgetToken: text("widget_token"),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("payment_intents_tenant_idx").on(t.tenantId),
+    index("payment_intents_external_idx").on(t.externalId),
+  ],
+);
+
 // ─── M3 — Conciliación bancaria (open banking: Fintoc) ────────────────────────
 
 export const bankMovementStatusEnum = pgEnum("bank_movement_status", [
@@ -1131,6 +1165,7 @@ export type PaymentPlan = typeof paymentPlans.$inferSelect;
 export type Installment = typeof installments.$inferSelect;
 export type LegalCase = typeof legalCases.$inferSelect;
 export type BankMovement = typeof bankMovements.$inferSelect;
+export type PaymentIntent = typeof paymentIntents.$inferSelect;
 export type ClientDocument = typeof clientDocuments.$inferSelect;
 export type Lead = typeof leads.$inferSelect;
 export type LeadActivity = typeof leadActivities.$inferSelect;
@@ -1161,6 +1196,7 @@ export const TENANT_SCOPED_TABLES = [
   "client_documents",
   "integrations",
   "ghl_snapshots",
+  "payment_intents",
 ] as const;
 
 export { sql };

@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { Card, CardHeader, EmptyState, Stat } from "@/components/ui";
 import { formatClp } from "@/lib/money";
-import { markInstallmentPaid } from "@/server/actions";
+import { createCuotaPaymentLink, markInstallmentPaid } from "@/server/actions";
 import { getCobranza } from "@/server/queries";
 
 export default async function CobranzaPage() {
   const { totals, vencidas, proximas } = await getCobranza();
+  const fintoc = (process.env.BANK_PROVIDER ?? "mock") === "fintoc";
 
   const Row = ({
     r,
@@ -38,12 +39,22 @@ export default async function CobranzaPage() {
         {formatClp(r.inst.amountClp)}
       </td>
       <td className="px-5 py-3 text-right">
-        <form action={markInstallmentPaid}>
-          <input type="hidden" name="installmentId" value={r.inst.id} />
-          <button className="text-xs font-medium text-brand-600 hover:underline">
-            Marcar pagada
-          </button>
-        </form>
+        <div className="flex items-center justify-end gap-3">
+          {fintoc && (
+            <form action={createCuotaPaymentLink}>
+              <input type="hidden" name="installmentId" value={r.inst.id} />
+              <button className="text-xs font-medium text-slate-500 hover:text-brand-600 hover:underline">
+                Cobrar (Fintoc)
+              </button>
+            </form>
+          )}
+          <form action={markInstallmentPaid}>
+            <input type="hidden" name="installmentId" value={r.inst.id} />
+            <button className="text-xs font-medium text-brand-600 hover:underline">
+              Marcar pagada
+            </button>
+          </form>
+        </div>
       </td>
     </tr>
   );
