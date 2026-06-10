@@ -71,6 +71,24 @@ export default async function ConciliacionPage() {
         )}
       </div>
 
+      {!connected && (
+        <Card>
+          <CardHeader title="Conectar Fintoc (open banking + cobros)" />
+          <div className="p-5 text-sm text-slate-600">
+            <ol className="list-decimal space-y-1 pl-5">
+              <li>Crea tu cuenta en Fintoc y conecta el banco de la empresa (obtienes el <strong>link token</strong> y el <strong>account id</strong>).</li>
+              <li>En Vercel define <code>BANK_PROVIDER=fintoc</code>, <code>FINTOC_SECRET_KEY</code>, <code>FINTOC_LINK_TOKEN</code>, <code>FINTOC_ACCOUNT_ID</code> y <code>FINTOC_PUBLIC_KEY</code>.</li>
+              <li>
+                Configura el <strong>webhook</strong> en Fintoc apuntando a{" "}
+                <code className="rounded bg-slate-100 px-1">https://5000.cl/api/webhooks/fintoc</code>{" "}
+                y pon el secreto en <code>FINTOC_WEBHOOK_SECRET</code>.
+              </li>
+              <li>Listo: <strong>Sincronizar</strong> trae movimientos reales, <strong>Refrescar</strong> pide datos al banco, y los <strong>cobros de cuotas</strong> se marcan pagados solos al recibir el pago.</li>
+            </ol>
+          </div>
+        </Card>
+      )}
+
       <div className="grid gap-4 sm:grid-cols-3">
         <Stat label="Abonos del período" value={formatClp(totals.abonos)} />
         <Stat label="Conciliado" value={formatClp(totals.conciliado)} />
