@@ -36,6 +36,12 @@ export default async function PortalPage() {
   }
 
   const { client, parcels, cuotas, documents, updates } = data;
+  // Los archivos del portal se sirven por una ruta autenticada por token de
+  // portal (no requiere sesión de app). URLs externas (https) se dejan igual.
+  const portalUrl = (u: string) =>
+    u.startsWith("/api/files/")
+      ? u.replace("/api/files/", "/api/portal/files/")
+      : u;
   const KIND_META: Record<string, { label: string; icon: string; tone: string }> = {
     avance: { label: "Avance de obra", icon: "🏗️", tone: "bg-brand-50 text-brand-700" },
     hito: { label: "Hito", icon: "🎯", tone: "bg-emerald-50 text-emerald-700" },
@@ -189,9 +195,14 @@ export default async function PortalPage() {
                       <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
                         {u.imageUrls.map((src) => (
                           // eslint-disable-next-line @next/next/no-img-element
-                          <a key={src} href={src} target="_blank" rel="noopener noreferrer">
+                          <a
+                            key={src}
+                            href={portalUrl(src)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
                             <img
-                              src={src}
+                              src={portalUrl(src)}
                               alt={u.title}
                               className="h-28 w-full rounded-lg object-cover"
                             />
@@ -216,7 +227,7 @@ export default async function PortalPage() {
             {documents.map((d) => (
               <li key={d.id} className="px-4 py-3">
                 <a
-                  href={d.url}
+                  href={portalUrl(d.url)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="font-medium text-brand-600 hover:underline"

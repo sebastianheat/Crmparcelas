@@ -1,10 +1,15 @@
+import { get } from "@vercel/blob";
 import { eq } from "drizzle-orm";
 import { blobs } from "@/db/schema";
 import { withCurrentTenant } from "@/lib/session";
+import { streamBlobRow } from "@/lib/serve-blob";
 
 export const dynamic = "force-dynamic";
 
-/** Sirve un archivo guardado en Postgres (fallback sin Vercel Blob). RLS por tenant. */
+/**
+ * Sirve un archivo del tenant activo (app). RLS por tenant vía sesión.
+ * Los bytes vienen de Postgres o de Vercel Blob privado (get() autenticado).
+ */
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -14,12 +19,5 @@ export async function GET(
     tx.query.blobs.findFirst({ where: eq(blobs.id, id) }),
   );
   if (!file) return new Response("No encontrado", { status: 404 });
-
-  return new Response(new Uint8Array(file.data), {
-    headers: {
-      "Content-Type": file.mime,
-      "Content-Disposition": `inline; filename="${file.filename ?? id}"`,
-      "Cache-Control": "private, max-age=3600",
-    },
-  });
+  return streamBlobRow(file, get);
 }

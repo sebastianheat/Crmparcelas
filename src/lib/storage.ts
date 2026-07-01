@@ -3,10 +3,18 @@ import { blobs } from "@/db/schema";
 import { withTenant } from "@/db/tenant";
 
 /**
- * Guarda un archivo y devuelve su URL.
- *  - Si BLOB_READ_WRITE_TOKEN está configurado → Vercel Blob (URL pública, escalable).
- *  - Si no → Postgres (bytea), servido por /api/files/[id]. Sin setup externo.
- * Misma firma para ambos: cambiar de backend no toca la lógica de negocio.
+ * Guarda un archivo y devuelve una URL estable servida por la app
+ * (`/api/files/<id>`), con control de acceso por tenant.
+ *
+ * El registro en `blobs` (con tenant_id + RLS) es la fuente de verdad; los
+ * bytes viven en uno de dos backends, transparente para el negocio:
+ *  - Vercel Blob PRIVADO si BLOB_READ_WRITE_TOKEN está configurado → sólo se
+ *    guarda el `pathname`; el contenido se sirve con get() autenticado. Ideal
+ *    para documentos legales (escrituras, cédulas): no quedan públicos.
+ *  - Postgres (bytea) si no hay token → sin setup externo.
+ *
+ * En ambos casos la URL pasa por `/api/files/[id]`, así el portal del cliente
+ * y la app aplican control de acceso (a diferencia de una URL pública directa).
  */
 export async function storeFile(opts: {
   tenantId: string;
@@ -15,14 +23,19 @@ export async function storeFile(opts: {
   contentType: string;
 }): Promise<string> {
   const { tenantId, pathname, bytes, contentType } = opts;
+  const filename = pathname.split("/").pop() ?? null;
+
+  let blobPathname: string | null = null;
+  let data: Buffer | null = Buffer.from(bytes);
 
   if (process.env.BLOB_READ_WRITE_TOKEN) {
-    const { url } = await put(pathname, Buffer.from(bytes), {
-      access: "public",
+    const res = await put(pathname, Buffer.from(bytes), {
+      access: "private",
       addRandomSuffix: true,
       contentType,
     });
-    return url;
+    blobPathname = res.pathname;
+    data = null; // los bytes viven en Vercel Blob, no en Postgres
   }
 
   const id = await withTenant(tenantId, async (tx) => {
@@ -30,9 +43,10 @@ export async function storeFile(opts: {
       .insert(blobs)
       .values({
         tenantId,
-        filename: pathname.split("/").pop() ?? null,
+        filename,
         mime: contentType,
-        data: Buffer.from(bytes),
+        data,
+        pathname: blobPathname,
       })
       .returning({ id: blobs.id });
     return row.id;

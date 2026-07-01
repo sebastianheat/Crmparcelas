@@ -223,7 +223,11 @@ export const blobs = pgTable(
       .references(() => tenants.id, { onDelete: "cascade" }),
     filename: text("filename"),
     mime: text("mime").notNull(),
-    data: bytea("data").notNull(),
+    // Bytes en Postgres (fallback sin Blob). Null cuando el archivo vive en
+    // Vercel Blob (privado): en ese caso se usa `pathname`.
+    data: bytea("data"),
+    // Ruta del blob privado en Vercel Blob. Se sirve vía get() autenticado.
+    pathname: text("pathname"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -1195,6 +1199,7 @@ export const parcelEventsRelations = relations(parcelEvents, ({ one }) => ({
 // ─── Tipos inferidos ──────────────────────────────────────────────────────────
 
 export type Tenant = typeof tenants.$inferSelect;
+export type Blob = typeof blobs.$inferSelect;
 export type User = typeof users.$inferSelect;
 export type Membership = typeof memberships.$inferSelect;
 export type Role = (typeof roleEnum.enumValues)[number];
