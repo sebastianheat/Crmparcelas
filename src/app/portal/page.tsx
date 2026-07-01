@@ -35,7 +35,13 @@ export default async function PortalPage() {
     );
   }
 
-  const { client, parcels, cuotas, documents } = data;
+  const { client, parcels, cuotas, documents, updates } = data;
+  const KIND_META: Record<string, { label: string; icon: string; tone: string }> = {
+    avance: { label: "Avance de obra", icon: "🏗️", tone: "bg-brand-50 text-brand-700" },
+    hito: { label: "Hito", icon: "🎯", tone: "bg-emerald-50 text-emerald-700" },
+    notificacion: { label: "Aviso", icon: "📣", tone: "bg-sky-50 text-sky-700" },
+    plazo: { label: "Plazo", icon: "📅", tone: "bg-amber-50 text-amber-700" },
+  };
   const fintocPk = process.env.FINTOC_PUBLIC_KEY || "";
   const pagado = cuotas
     .filter((c) => c.status === "pagada")
@@ -128,6 +134,76 @@ export default async function PortalPage() {
               </tbody>
             </table>
           </div>
+        </Section>
+      )}
+
+      {/* Avances del proyecto */}
+      {updates.length > 0 && (
+        <Section title="Avances del proyecto">
+          <ol className="relative space-y-4 border-l-2 border-slate-100 pl-5">
+            {updates.map((u) => {
+              const meta = KIND_META[u.kind] ?? KIND_META.avance;
+              return (
+                <li key={u.id} className="relative">
+                  <span className="absolute -left-[27px] flex h-5 w-5 items-center justify-center rounded-full bg-white text-xs ring-2 ring-slate-100">
+                    {meta.icon}
+                  </span>
+                  <div className="rounded-xl border border-slate-200 bg-white p-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${meta.tone}`}>
+                        {meta.label}
+                      </span>
+                      {u.stage && (
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+                          {u.stage}
+                        </span>
+                      )}
+                      {u.demora && (
+                        <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">
+                          Con retraso
+                        </span>
+                      )}
+                      <span className="ml-auto text-xs text-slate-400">
+                        {new Date(u.createdAt).toLocaleDateString("es-CL")}
+                      </span>
+                    </div>
+                    <p className="mt-2 font-semibold text-slate-900">{u.title}</p>
+                    {u.projectName && (
+                      <p className="text-xs text-slate-400">{u.projectName}</p>
+                    )}
+                    {u.body && (
+                      <p className="mt-1 whitespace-pre-wrap text-sm text-slate-600">
+                        {u.body}
+                      </p>
+                    )}
+                    {u.kind === "plazo" && u.dueDate && (
+                      <p className="mt-1 text-xs text-slate-500">
+                        Fecha comprometida:{" "}
+                        {new Date(u.dueDate).toLocaleDateString("es-CL")}
+                        {u.doneAt
+                          ? ` · cumplido el ${new Date(u.doneAt).toLocaleDateString("es-CL")}`
+                          : ""}
+                      </p>
+                    )}
+                    {u.imageUrls && u.imageUrls.length > 0 && (
+                      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                        {u.imageUrls.map((src) => (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <a key={src} href={src} target="_blank" rel="noopener noreferrer">
+                            <img
+                              src={src}
+                              alt={u.title}
+                              className="h-28 w-full rounded-lg object-cover"
+                            />
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
         </Section>
       )}
 

@@ -17,6 +17,8 @@ import { formatPrice } from "@/lib/money";
 import { requireSession } from "@/lib/session";
 import {
   addParcels,
+  addProjectUpdate,
+  completeProjectUpdate,
   generateLanding,
   saveProjectLegal,
   uploadProjectDocument,
@@ -304,6 +306,110 @@ export default async function ProjectDetailPage({
                 </span>
               </li>
             ))}
+          </ul>
+        )}
+      </Card>
+
+      {/* Avances de proyecto (portal del cliente) */}
+      <Card>
+        <CardHeader
+          title="Avances de proyecto"
+          subtitle="Publica hitos, obras, avisos y plazos. El cliente los ve en su portal, con línea de tiempo y fotos."
+        />
+        <form
+          action={addProjectUpdate}
+          className="space-y-4 border-b border-slate-100 p-5"
+        >
+          <input type="hidden" name="projectId" value={project.id} />
+          <div className="grid gap-4 sm:grid-cols-3">
+            <Field label="Tipo">
+              <Select name="kind" defaultValue="avance">
+                <option value="avance">🏗️ Avance de obra</option>
+                <option value="hito">🎯 Hito de etapa</option>
+                <option value="notificacion">📣 Aviso al cliente</option>
+                <option value="plazo">📅 Plazo comprometido</option>
+              </Select>
+            </Field>
+            <Field label="Etapa (opcional)">
+              <Input name="stage" placeholder="Urbanización, Agua, Entrega…" />
+            </Field>
+            <Field label="Fecha comprometida (si es plazo)">
+              <Input name="dueDate" type="date" />
+            </Field>
+          </div>
+          <Field label="Título">
+            <Input name="title" required placeholder="Avance camino principal 60%" />
+          </Field>
+          <Field label="Detalle (opcional)">
+            <Textarea
+              name="body"
+              rows={2}
+              placeholder="Describe el avance, qué se hizo, próximos pasos…"
+            />
+          </Field>
+          <Field label="Fotos (opcional, varias)">
+            <Input
+              name="images"
+              type="file"
+              accept="image/*"
+              multiple
+              className="file:mr-2 file:rounded-md file:border-0 file:bg-slate-100 file:px-2 file:py-1.5 file:text-xs"
+            />
+          </Field>
+          <div className="flex justify-end">
+            <Button type="submit">Publicar avance</Button>
+          </div>
+        </form>
+        {project.updates.length === 0 ? (
+          <p className="p-5 text-sm text-slate-400">
+            Aún no hay avances publicados. Publica el primero arriba.
+          </p>
+        ) : (
+          <ul className="divide-y divide-slate-100 px-5 pb-2">
+            {project.updates.map((u) => {
+              const demora =
+                u.kind === "plazo" &&
+                !u.doneAt &&
+                u.dueDate != null &&
+                new Date(u.dueDate).getTime() < Date.now();
+              return (
+                <li key={u.id} className="flex items-start justify-between gap-3 py-3">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs font-medium text-slate-500 capitalize">
+                        {u.kind}
+                      </span>
+                      {u.stage && (
+                        <Badge tone="slate">{u.stage}</Badge>
+                      )}
+                      {demora && <Badge tone="red">Con retraso</Badge>}
+                      {u.doneAt && <Badge tone="green">Cumplido</Badge>}
+                    </div>
+                    <p className="mt-0.5 font-medium text-slate-800">{u.title}</p>
+                    {u.body && (
+                      <p className="text-sm text-slate-500 line-clamp-2">{u.body}</p>
+                    )}
+                    <p className="text-xs text-slate-400">
+                      {new Date(u.createdAt).toLocaleDateString("es-CL")}
+                      {u.dueDate
+                        ? ` · vence ${new Date(u.dueDate).toLocaleDateString("es-CL")}`
+                        : ""}
+                      {u.imageUrls && u.imageUrls.length > 0
+                        ? ` · ${u.imageUrls.length} foto(s)`
+                        : ""}
+                    </p>
+                  </div>
+                  {u.kind === "plazo" && !u.doneAt && (
+                    <form action={completeProjectUpdate}>
+                      <input type="hidden" name="updateId" value={u.id} />
+                      <button className="whitespace-nowrap text-xs font-medium text-brand-600 hover:underline">
+                        Marcar cumplido
+                      </button>
+                    </form>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         )}
       </Card>

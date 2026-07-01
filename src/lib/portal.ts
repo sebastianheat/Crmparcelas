@@ -1,6 +1,14 @@
 import { createHmac } from "crypto";
-import { eq, inArray } from "drizzle-orm";
-import { clientDocuments, clients, installments, parcels, paymentPlans, projects } from "@/db/schema";
+import { and, desc, eq, inArray } from "drizzle-orm";
+import {
+  clientDocuments,
+  clients,
+  installments,
+  parcels,
+  paymentPlans,
+  projects,
+  projectUpdates,
+} from "@/db/schema";
 import { withTenant } from "@/db/tenant";
 
 const SECRET = process.env.AUTH_SECRET ?? "dev-secret";
@@ -46,6 +54,7 @@ export function getPortalData(tenantId: string, clientId: string) {
         id: parcels.id,
         code: parcels.code,
         status: parcels.status,
+        projectId: parcels.projectId,
         projectName: projects.name,
         comuna: projects.comuna,
       })
@@ -54,6 +63,9 @@ export function getPortalData(tenantId: string, clientId: string) {
       .where(eq(parcels.currentClientId, clientId));
 
     const parcelIds = ownedParcels.map((p) => p.id);
+    const projectIds = [
+      ...new Set(ownedParcels.map((p) => p.projectId).filter(Boolean)),
+    ] as string[];
     const cuotas = parcelIds.length
       ? await tx
           .select()
@@ -73,11 +85,43 @@ export function getPortalData(tenantId: string, clientId: string) {
       .from(clientDocuments)
       .where(eq(clientDocuments.clientId, clientId));
 
+    const updates = projectIds.length
+      ? await tx
+          .select()
+          .from(projectUpdates)
+          .where(
+            and(
+              inArray(projectUpdates.projectId, projectIds),
+              eq(projectUpdates.published, true),
+            ),
+          )
+          .orderBy(desc(projectUpdates.createdAt))
+      : [];
+
     const now = Date.now();
     const cuotasView = cuotas.map((c) => ({
       ...c,
       overdue: c.status === "pendiente" && new Date(c.dueDate).getTime() < now,
     }));
-    return { client, parcels: ownedParcels, cuotas: cuotasView, plans, documents };
+    const projectNameById = new Map(
+      ownedParcels.map((p) => [p.projectId, p.projectName]),
+    );
+    const updatesView = updates.map((u) => ({
+      ...u,
+      projectName: projectNameById.get(u.projectId) ?? null,
+      demora:
+        u.kind === "plazo" &&
+        !u.doneAt &&
+        u.dueDate != null &&
+        new Date(u.dueDate).getTime() < now,
+    }));
+    return {
+      client,
+      parcels: ownedParcels,
+      cuotas: cuotasView,
+      plans,
+      documents,
+      updates: updatesView,
+    };
   });
 }

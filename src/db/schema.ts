@@ -961,6 +961,55 @@ export const paymentIntents = pgTable(
   ],
 );
 
+// ─── Portal cliente — Avances de proyecto (obras, hitos, plazos) ──────────────
+// Bitácora append-only de avances que ve el cliente en su portal: etapas de
+// urbanización/obras, fotos, hitos, notificaciones y plazos (con demoras que el
+// sistema detecta comparando dueDate vs doneAt).
+
+export const projectUpdateKindEnum = pgEnum("project_update_kind", [
+  "avance", // avance de obra con fotos
+  "hito", // hito de etapa (urbanización, recepción, entrega)
+  "notificacion", // aviso al cliente
+  "plazo", // compromiso con fecha (dueDate)
+]);
+
+export const projectUpdates = pgTable(
+  "project_updates",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    kind: projectUpdateKindEnum("kind").default("avance").notNull(),
+    // Etapa del proyecto a la que pertenece (texto libre: "Urbanización",
+    // "Obras de agua", "Entrega", etc.) para agrupar en el portal.
+    stage: text("stage"),
+    title: text("title").notNull(),
+    body: text("body"),
+    // Fotos del avance/obra (URLs en Blob o Postgres).
+    imageUrls: jsonb("image_urls").$type<string[]>().default([]),
+    // Para kind=plazo: fecha comprometida y fecha real de cumplimiento.
+    // Si doneAt es null y dueDate ya pasó → el sistema marca "demora".
+    dueDate: timestamp("due_date", { withTimezone: true }),
+    doneAt: timestamp("done_at", { withTimezone: true }),
+    // Visible en el portal del cliente (por si se quiere borrador interno).
+    published: boolean("published").default(true).notNull(),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    index("project_updates_tenant_idx").on(t.tenantId),
+    index("project_updates_project_idx").on(t.projectId),
+  ],
+);
+
 // ─── M3 — Conciliación bancaria (open banking: Fintoc) ────────────────────────
 
 export const bankMovementStatusEnum = pgEnum("bank_movement_status", [
@@ -1168,6 +1217,7 @@ export type Installment = typeof installments.$inferSelect;
 export type LegalCase = typeof legalCases.$inferSelect;
 export type BankMovement = typeof bankMovements.$inferSelect;
 export type PaymentIntent = typeof paymentIntents.$inferSelect;
+export type ProjectUpdate = typeof projectUpdates.$inferSelect;
 export type ClientDocument = typeof clientDocuments.$inferSelect;
 export type Lead = typeof leads.$inferSelect;
 export type LeadActivity = typeof leadActivities.$inferSelect;
@@ -1199,6 +1249,7 @@ export const TENANT_SCOPED_TABLES = [
   "integrations",
   "ghl_snapshots",
   "payment_intents",
+  "project_updates",
 ] as const;
 
 export { sql };
