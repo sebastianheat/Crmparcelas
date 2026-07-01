@@ -1,7 +1,11 @@
 import Link from "next/link";
 import { Card, CardHeader, EmptyState, Stat } from "@/components/ui";
 import { formatClp } from "@/lib/money";
-import { createCuotaPaymentLink, markInstallmentPaid } from "@/server/actions";
+import {
+  createCuotaPaymentLink,
+  markInstallmentPaid,
+  uploadInstallmentProof,
+} from "@/server/actions";
 import { getCobranza } from "@/server/queries";
 
 export default async function CobranzaPage() {
@@ -48,6 +52,29 @@ export default async function CobranzaPage() {
               </button>
             </form>
           )}
+          {r.inst.proofUrl && (
+            <a
+              href={r.inst.proofUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-slate-500 hover:text-brand-600"
+              title="Ver comprobante"
+            >
+              📎
+            </a>
+          )}
+          <form action={uploadInstallmentProof} className="flex items-center gap-1">
+            <input type="hidden" name="installmentId" value={r.inst.id} />
+            <input
+              type="file"
+              name="file"
+              required
+              className="w-28 text-[10px] text-slate-500 file:mr-1 file:rounded file:border-0 file:bg-brand-50 file:px-1.5 file:py-0.5 file:text-[10px] file:text-brand-700"
+            />
+            <button className="text-xs font-medium text-slate-500 hover:text-brand-600 hover:underline">
+              subir
+            </button>
+          </form>
           <form action={markInstallmentPaid}>
             <input type="hidden" name="installmentId" value={r.inst.id} />
             <button className="text-xs font-medium text-brand-600 hover:underline">

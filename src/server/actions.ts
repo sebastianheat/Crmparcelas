@@ -1805,3 +1805,38 @@ export async function switchTenant(formData: FormData) {
   });
   redirect("/app");
 }
+
+// ─── Comprobante de pago por cuota (ejecutivo de cobranza) ────────────────────
+
+export async function uploadInstallmentProof(formData: FormData) {
+  await requirePermission("billing:write");
+  const installmentId = String(formData.get("installmentId"));
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) {
+    throw new Error("Adjunta el comprobante.");
+  }
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let parcelId = "";
+  await withCurrentTenant(async (tx, { tenantId, userId }) => {
+    const inst = await tx.query.installments.findFirst({
+      where: eq(installments.id, installmentId),
+      columns: { parcelId: true, number: true },
+    });
+    if (!inst) throw new Error("Cuota no encontrada.");
+    parcelId = inst.parcelId;
+    const url = await storeFile({
+      tenantId,
+      pathname: `cobranza/${installmentId}/${file.name}`,
+      bytes,
+      contentType: file.type || "application/octet-stream",
+    });
+    // Sube comprobante + marca la cuota pagada (genera comprobante de dinero).
+    await payInstallment(tx, tenantId, installmentId, { userId });
+    await tx
+      .update(installments)
+      .set({ proofUrl: url })
+      .where(eq(installments.id, installmentId));
+  });
+  if (parcelId) revalidatePath(`/app/parcelas/${parcelId}`);
+  revalidatePath("/app/cobranza");
+}

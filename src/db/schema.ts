@@ -717,6 +717,8 @@ export const installments = pgTable(
     status: installmentStatusEnum("status").default("pendiente").notNull(),
     paidAt: timestamp("paid_at", { withTimezone: true }),
     reminderSentAt: timestamp("reminder_sent_at", { withTimezone: true }),
+    // Comprobante del pago (foto/PDF) que sube el ejecutivo de cobranza.
+    proofUrl: text("proof_url"),
     voucherId: uuid("voucher_id").references(() => moneyVouchers.id, {
       onDelete: "set null",
     }),

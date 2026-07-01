@@ -1,0 +1,1 @@
+ALTER TABLE "installments" ADD COLUMN "proof_url" text;
