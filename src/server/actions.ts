@@ -2,8 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { hash } from "bcryptjs";
-import { desc, eq, max } from "drizzle-orm";
+import { and, desc, eq, max } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
 import { db } from "@/db/client";
@@ -52,7 +53,7 @@ import { payInstallment } from "@/lib/cobranza";
 import { handleInboundWhatsApp } from "@/lib/whatsapp/agent";
 import { runRemindersForTenant } from "@/lib/reminders";
 import { ASSIGNABLE_ROLES } from "@/lib/roles";
-import { withCurrentTenant, requirePermission } from "@/lib/session";
+import { withCurrentTenant, requirePermission, requireSession, ACTIVE_TENANT_COOKIE } from "@/lib/session";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -1782,4 +1783,25 @@ export async function createPortalCuotaPayment(
     console.error("[portal] pago fintoc", e);
     return { error: "No se pudo iniciar el pago." };
   }
+}
+
+// ─── Multi-tenant: selector de empresa ────────────────────────────────────────
+
+export async function switchTenant(formData: FormData) {
+  const tenantId = String(formData.get("tenantId"));
+  const session = await requireSession();
+  const m = await db.query.memberships.findFirst({
+    where: and(
+      eq(memberships.userId, session.user.id),
+      eq(memberships.tenantId, tenantId),
+    ),
+  });
+  if (!m) throw new Error("No tienes acceso a esa empresa.");
+  (await cookies()).set(ACTIVE_TENANT_COOKIE, tenantId, {
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 30,
+  });
+  redirect("/app");
 }

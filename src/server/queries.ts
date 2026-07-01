@@ -29,7 +29,22 @@ import { withTenant } from "@/db/tenant";
 import { LEAD_ACTIVE_STAGES, LEAD_WON_STAGES } from "@/lib/labels";
 import { toNumber } from "@/lib/money";
 import { SELLER_ROLES } from "@/lib/roles";
-import { withCurrentTenant } from "@/lib/session";
+import { requireSession, withCurrentTenant } from "@/lib/session";
+
+/** Empresas (tenants) a las que el usuario actual tiene acceso, + la activa. */
+export async function listUserTenants() {
+  const session = await requireSession();
+  const rows = await db.query.memberships.findMany({
+    where: eq(memberships.userId, session.user.id),
+    with: { tenant: { columns: { id: true, name: true, slug: true } } },
+  });
+  return {
+    activeTenantId: session.tenantId,
+    tenants: rows
+      .map((r) => ({ id: r.tenant.id, name: r.tenant.name, role: r.role }))
+      .sort((a, b) => a.name.localeCompare(b.name)),
+  };
+}
 
 // ─── Público (landing / mapa de stock compartible por URL) ────────────────────
 
