@@ -1303,6 +1303,50 @@ export async function deleteClientDocument(formData: FormData) {
   revalidatePath(`/app/clientes/${clientId}`);
 }
 
+/**
+ * Carga masiva: sube VARIOS archivos de una vez a la carpeta digital de un
+ * cliente. Cada archivo va a storeFile (Vercel Blob si BLOB_READ_WRITE_TOKEN
+ * está configurado; si no, Postgres) y queda visible en el portal del cliente.
+ */
+export async function uploadClientDocumentsBulk(formData: FormData) {
+  await requirePermission("events:write");
+  const clientId = String(formData.get("clientId"));
+  const type = String(formData.get("docType") || "otro") as ClientDocType;
+  const files = formData
+    .getAll("files")
+    .filter((f): f is File => f instanceof File && f.size > 0);
+  if (files.length === 0) throw new Error("Adjunta al menos un archivo.");
+
+  await withCurrentTenant(async (tx, { tenantId, userId }) => {
+    const client = await tx.query.clients.findFirst({
+      where: eq(clients.id, clientId),
+      columns: { id: true },
+    });
+    if (!client) throw new Error("Cliente no encontrado.");
+    for (const file of files) {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const url = await storeFile({
+        tenantId,
+        pathname: `clientes/${clientId}/${file.name}`,
+        bytes,
+        contentType: file.type || "application/octet-stream",
+      });
+      await tx.insert(clientDocuments).values({
+        tenantId,
+        clientId,
+        type,
+        title: file.name,
+        url,
+        mime: file.type || null,
+        createdByUserId: userId,
+      });
+    }
+  });
+  revalidatePath(`/app/clientes/${clientId}`);
+  revalidatePath("/app/legal/cargar");
+  revalidatePath("/portal");
+}
+
 // ─── Recordatorios automáticos ────────────────────────────────────────────────
 
 export async function runRemindersNow() {

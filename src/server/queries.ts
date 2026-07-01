@@ -599,6 +599,37 @@ export function listClients() {
   );
 }
 
+/**
+ * Clientes con su proyecto/parcela y el número de documentos ya cargados.
+ * Para la página de carga masiva de la carpeta digital.
+ */
+export function listClientsForUpload() {
+  return withCurrentTenant(async (tx) => {
+    const rows = await tx
+      .select({
+        id: clients.id,
+        name: clients.name,
+        rut: clients.rut,
+        parcelCode: parcels.code,
+        projectName: projects.name,
+        docCount: count(clientDocuments.id),
+      })
+      .from(clients)
+      .leftJoin(parcels, eq(parcels.currentClientId, clients.id))
+      .leftJoin(projects, eq(parcels.projectId, projects.id))
+      .leftJoin(clientDocuments, eq(clientDocuments.clientId, clients.id))
+      .groupBy(
+        clients.id,
+        clients.name,
+        clients.rut,
+        parcels.code,
+        projects.name,
+      )
+      .orderBy(projects.name, clients.name);
+    return rows;
+  });
+}
+
 export function getClient(id: string) {
   return withCurrentTenant(async (tx) => {
     const client = await tx.query.clients.findFirst({
