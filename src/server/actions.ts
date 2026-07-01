@@ -30,6 +30,7 @@ import {
   paymentIntents,
   paymentPlans,
   projectDocuments,
+  projectUpdates,
   projects,
   promesaTemplates,
   sellerCompanies,
@@ -1302,6 +1303,50 @@ export async function deleteClientDocument(formData: FormData) {
   revalidatePath(`/app/clientes/${clientId}`);
 }
 
+/**
+ * Carga masiva: sube VARIOS archivos de una vez a la carpeta digital de un
+ * cliente. Cada archivo va a storeFile (Vercel Blob si BLOB_READ_WRITE_TOKEN
+ * está configurado; si no, Postgres) y queda visible en el portal del cliente.
+ */
+export async function uploadClientDocumentsBulk(formData: FormData) {
+  await requirePermission("events:write");
+  const clientId = String(formData.get("clientId"));
+  const type = String(formData.get("docType") || "otro") as ClientDocType;
+  const files = formData
+    .getAll("files")
+    .filter((f): f is File => f instanceof File && f.size > 0);
+  if (files.length === 0) throw new Error("Adjunta al menos un archivo.");
+
+  await withCurrentTenant(async (tx, { tenantId, userId }) => {
+    const client = await tx.query.clients.findFirst({
+      where: eq(clients.id, clientId),
+      columns: { id: true },
+    });
+    if (!client) throw new Error("Cliente no encontrado.");
+    for (const file of files) {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const url = await storeFile({
+        tenantId,
+        pathname: `clientes/${clientId}/${file.name}`,
+        bytes,
+        contentType: file.type || "application/octet-stream",
+      });
+      await tx.insert(clientDocuments).values({
+        tenantId,
+        clientId,
+        type,
+        title: file.name,
+        url,
+        mime: file.type || null,
+        createdByUserId: userId,
+      });
+    }
+  });
+  revalidatePath(`/app/clientes/${clientId}`);
+  revalidatePath("/app/legal/cargar");
+  revalidatePath("/portal");
+}
+
 // ─── Recordatorios automáticos ────────────────────────────────────────────────
 
 export async function runRemindersNow() {
@@ -1839,4 +1884,91 @@ export async function uploadInstallmentProof(formData: FormData) {
   });
   if (parcelId) revalidatePath(`/app/parcelas/${parcelId}`);
   revalidatePath("/app/cobranza");
+}
+
+// ─── Avances de proyecto (portal del cliente) ─────────────────────────────────
+
+/**
+ * Publica un avance/hito/aviso/plazo del proyecto. Sube fotos opcionales
+ * (múltiples) a storeFile y las guarda en image_urls. Bitácora append-only:
+ * el cliente lo ve en su portal.
+ */
+export async function addProjectUpdate(formData: FormData) {
+  await requirePermission("projects:write");
+  const projectId = String(formData.get("projectId"));
+  const kind = String(formData.get("kind") || "avance") as
+    | "avance"
+    | "hito"
+    | "notificacion"
+    | "plazo";
+  const title = String(formData.get("title") || "").trim();
+  const body = String(formData.get("body") || "").trim() || null;
+  const stage = String(formData.get("stage") || "").trim() || null;
+  const dueDateRaw = String(formData.get("dueDate") || "").trim();
+  const dueDate = dueDateRaw ? new Date(dueDateRaw) : null;
+  if (!title) throw new Error("Escribe un título del avance.");
+
+  const files = formData
+    .getAll("images")
+    .filter((f): f is File => f instanceof File && f.size > 0);
+
+  let projectSlug = "";
+  await withCurrentTenant(async (tx, { tenantId, userId }) => {
+    const project = await tx.query.projects.findFirst({
+      where: eq(projects.id, projectId),
+      columns: { slug: true },
+    });
+    if (!project) throw new Error("Proyecto no encontrado.");
+    projectSlug = project.slug;
+
+    const imageUrls: string[] = [];
+    for (const file of files) {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const url = await storeFile({
+        tenantId,
+        pathname: `avances/${projectId}/${file.name}`,
+        bytes,
+        contentType: file.type || "application/octet-stream",
+      });
+      imageUrls.push(url);
+    }
+
+    await tx.insert(projectUpdates).values({
+      tenantId,
+      projectId,
+      kind,
+      stage,
+      title,
+      body,
+      imageUrls,
+      dueDate,
+      createdByUserId: userId,
+    });
+  });
+
+  revalidatePath(`/app/proyectos/${projectSlug}`);
+  revalidatePath("/portal");
+}
+
+/** Marca un plazo como cumplido (registra la fecha real de cumplimiento). */
+export async function completeProjectUpdate(formData: FormData) {
+  await requirePermission("projects:write");
+  const id = String(formData.get("updateId"));
+  let projectSlug = "";
+  await withCurrentTenant(async (tx) => {
+    const [row] = await tx
+      .update(projectUpdates)
+      .set({ doneAt: new Date() })
+      .where(eq(projectUpdates.id, id))
+      .returning({ projectId: projectUpdates.projectId });
+    if (row) {
+      const project = await tx.query.projects.findFirst({
+        where: eq(projects.id, row.projectId),
+        columns: { slug: true },
+      });
+      projectSlug = project?.slug ?? "";
+    }
+  });
+  if (projectSlug) revalidatePath(`/app/proyectos/${projectSlug}`);
+  revalidatePath("/portal");
 }

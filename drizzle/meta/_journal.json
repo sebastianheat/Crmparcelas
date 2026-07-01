@@ -162,6 +162,20 @@
       "when": 1782915220864,
       "tag": "0022_hard_christian_walker",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1782916433554,
+      "tag": "0023_safe_mad_thinker",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1782917813893,
+      "tag": "0024_unknown_kid_colt",
+      "breakpoints": true
     }
   ]
 }

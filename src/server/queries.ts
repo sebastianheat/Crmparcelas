@@ -18,6 +18,7 @@ import {
   parcels,
   paymentPlans,
   projectDocuments,
+  projectUpdates,
   projects,
   promesaTemplates,
   sellerCompanies,
@@ -105,7 +106,47 @@ export function getProjectBySlug(slug: string) {
       .from(projectDocuments)
       .where(eq(projectDocuments.projectId, project.id))
       .orderBy(desc(projectDocuments.createdAt));
-    return { ...project, documents };
+    const updates = await tx
+      .select()
+      .from(projectUpdates)
+      .where(eq(projectUpdates.projectId, project.id))
+      .orderBy(desc(projectUpdates.createdAt));
+    return { ...project, documents, updates };
+  });
+}
+
+/**
+ * Avances publicados de los proyectos donde el cliente tiene parcela.
+ * Para el portal del cliente: agrupa por proyecto, marca demoras
+ * (plazo con dueDate vencido y sin doneAt).
+ */
+export function getClientProjectUpdates(projectIds: string[]) {
+  if (projectIds.length === 0) return Promise.resolve([]);
+  return withCurrentTenant(async (tx) => {
+    const rows = await tx
+      .select({
+        upd: projectUpdates,
+        projectName: projects.name,
+      })
+      .from(projectUpdates)
+      .leftJoin(projects, eq(projectUpdates.projectId, projects.id))
+      .where(
+        and(
+          inArray(projectUpdates.projectId, projectIds),
+          eq(projectUpdates.published, true),
+        ),
+      )
+      .orderBy(desc(projectUpdates.createdAt));
+    const now = Date.now();
+    return rows.map((r) => ({
+      ...r.upd,
+      projectName: r.projectName,
+      demora:
+        r.upd.kind === "plazo" &&
+        !r.upd.doneAt &&
+        r.upd.dueDate != null &&
+        new Date(r.upd.dueDate).getTime() < now,
+    }));
   });
 }
 
@@ -556,6 +597,37 @@ export function listClients() {
   return withCurrentTenant((tx) =>
     tx.query.clients.findMany({ orderBy: clients.name }),
   );
+}
+
+/**
+ * Clientes con su proyecto/parcela y el número de documentos ya cargados.
+ * Para la página de carga masiva de la carpeta digital.
+ */
+export function listClientsForUpload() {
+  return withCurrentTenant(async (tx) => {
+    const rows = await tx
+      .select({
+        id: clients.id,
+        name: clients.name,
+        rut: clients.rut,
+        parcelCode: parcels.code,
+        projectName: projects.name,
+        docCount: count(clientDocuments.id),
+      })
+      .from(clients)
+      .leftJoin(parcels, eq(parcels.currentClientId, clients.id))
+      .leftJoin(projects, eq(parcels.projectId, projects.id))
+      .leftJoin(clientDocuments, eq(clientDocuments.clientId, clients.id))
+      .groupBy(
+        clients.id,
+        clients.name,
+        clients.rut,
+        parcels.code,
+        projects.name,
+      )
+      .orderBy(projects.name, clients.name);
+    return rows;
+  });
 }
 
 export function getClient(id: string) {
