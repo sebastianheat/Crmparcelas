@@ -360,6 +360,104 @@ export function getCobranza() {
   });
 }
 
+/**
+ * Resumen de cobranza para el dashboard: morosos agrupados por cliente,
+ * lo que vence esta semana y los totales del mes.
+ */
+export function getCobranzaResumen() {
+  return withCurrentTenant(async (tx) => {
+    const rows = await tx
+      .select({
+        inst: installments,
+        parcelCode: parcels.code,
+        projectName: projects.name,
+        clientName: clients.name,
+        clientId: clients.id,
+      })
+      .from(installments)
+      .leftJoin(parcels, eq(installments.parcelId, parcels.id))
+      .leftJoin(projects, eq(parcels.projectId, projects.id))
+      .leftJoin(clients, eq(parcels.currentClientId, clients.id))
+      .orderBy(installments.dueDate);
+
+    const now = new Date();
+    const hoy = now.getTime();
+    const en7dias = hoy + 7 * 86_400_000;
+    const mes = now.getMonth();
+    const anio = now.getFullYear();
+    const n = (v: string | number | null) => toNumber(v) ?? 0;
+
+    let vencidoTotal = 0;
+    let mesTotal = 0; // pendiente que vence este mes
+    let semanaTotal = 0;
+    let recaudadoMes = 0;
+
+    type Moroso = {
+      clientId: string | null;
+      clientName: string;
+      parcelas: Set<string>;
+      cuotas: number;
+      total: number;
+      masAntigua: Date;
+    };
+    const morosos = new Map<string, Moroso>();
+    const semana: typeof rows = [];
+
+    for (const r of rows) {
+      const monto = n(r.inst.amountClp);
+      const due = new Date(r.inst.dueDate);
+      if (r.inst.status === "pagada") {
+        const paid = r.inst.paidAt ? new Date(r.inst.paidAt) : due;
+        if (paid.getMonth() === mes && paid.getFullYear() === anio)
+          recaudadoMes += monto;
+        continue;
+      }
+      if (r.inst.status === "condonada") continue;
+      // pendiente
+      if (due.getMonth() === mes && due.getFullYear() === anio) mesTotal += monto;
+      if (due.getTime() < hoy) {
+        vencidoTotal += monto;
+        const key = r.clientId ?? r.inst.parcelId ?? r.inst.id;
+        const m = morosos.get(key);
+        if (m) {
+          m.cuotas += 1;
+          m.total += monto;
+          if (r.parcelCode) m.parcelas.add(r.parcelCode);
+        } else {
+          morosos.set(key, {
+            clientId: r.clientId,
+            clientName: r.clientName ?? "Sin cliente",
+            parcelas: new Set(r.parcelCode ? [r.parcelCode] : []),
+            cuotas: 1,
+            total: monto,
+            masAntigua: due,
+          });
+        }
+      } else if (due.getTime() <= en7dias) {
+        semanaTotal += monto;
+        semana.push(r);
+      }
+    }
+
+    const morososList = [...morosos.values()]
+      .sort((a, b) => a.masAntigua.getTime() - b.masAntigua.getTime())
+      .map((m) => ({
+        ...m,
+        parcelas: [...m.parcelas],
+        diasAtraso: Math.floor((hoy - m.masAntigua.getTime()) / 86_400_000),
+      }));
+
+    return {
+      vencidoTotal,
+      mesTotal,
+      semanaTotal,
+      recaudadoMes,
+      morosos: morososList,
+      semana: semana.slice(0, 12),
+    };
+  });
+}
+
 export function listSellerCompanies() {
   return withCurrentTenant((tx) =>
     tx.query.sellerCompanies.findMany({ orderBy: sellerCompanies.razonSocial }),
