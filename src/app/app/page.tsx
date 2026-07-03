@@ -2,10 +2,13 @@ import Link from "next/link";
 import { Badge, Card, CardHeader, EmptyState, LinkButton, Stat } from "@/components/ui";
 import { LEGAL_STATUS, PROJECT_STATUS, RIESGO } from "@/lib/labels";
 import { formatClp } from "@/lib/money";
-import { getDashboard } from "@/server/queries";
+import { getCobranzaResumen, getDashboard } from "@/server/queries";
 
 export default async function DashboardPage() {
-  const { projects, totals, projectCount } = await getDashboard();
+  const [{ projects, totals, projectCount }, cobranza] = await Promise.all([
+    getDashboard(),
+    getCobranzaResumen(),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -13,12 +16,129 @@ export default async function DashboardPage() {
         <div>
           <h1 className="text-xl font-semibold text-slate-900">Dashboard</h1>
           <p className="text-sm text-slate-500">
-            Orden contable y trazabilidad de tu operación parceladora.
+            Foco de hoy: cobranza del crédito directo.
           </p>
         </div>
-        <LinkButton href="/app/proyectos/nuevo">+ Nuevo proyecto</LinkButton>
+        <LinkButton href="/app/cobranza">Ir a Cobranza →</LinkButton>
       </div>
 
+      {/* ── Cobranza primero ── */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Stat
+          label="🔴 Vencido"
+          value={formatClp(cobranza.vencidoTotal)}
+          hint={`${cobranza.morosos.length} cliente${cobranza.morosos.length === 1 ? "" : "s"} atrasado${cobranza.morosos.length === 1 ? "" : "s"}`}
+        />
+        <Stat
+          label="Por cobrar este mes"
+          value={formatClp(cobranza.mesTotal)}
+          hint="Cuotas que vencen este mes"
+        />
+        <Stat
+          label="Vence esta semana"
+          value={formatClp(cobranza.semanaTotal)}
+          hint={`${cobranza.semana.length} cuota${cobranza.semana.length === 1 ? "" : "s"} en 7 días`}
+        />
+        <Stat
+          label="Recaudado este mes"
+          value={formatClp(cobranza.recaudadoMes)}
+          hint="Cuotas pagadas del mes"
+        />
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        {/* Clientes atrasados */}
+        <Card>
+          <CardHeader
+            title={`Clientes atrasados (${cobranza.morosos.length})`}
+            subtitle="Del más antiguo al más reciente — prioridad de cobranza."
+          />
+          {cobranza.morosos.length === 0 ? (
+            <div className="p-5">
+              <EmptyState title="Nadie atrasado 🎉" />
+            </div>
+          ) : (
+            <ul className="divide-y divide-slate-50">
+              {cobranza.morosos.slice(0, 8).map((m) => (
+                <li
+                  key={m.clientId ?? m.clientName}
+                  className="flex items-center justify-between gap-3 px-5 py-3"
+                >
+                  <div className="min-w-0">
+                    <Link
+                      href={m.clientId ? `/app/clientes/${m.clientId}` : "/app/cobranza"}
+                      className="block truncate font-medium text-slate-900 hover:text-brand-600"
+                    >
+                      {m.clientName}
+                    </Link>
+                    <p className="text-xs text-slate-400">
+                      {m.parcelas.join(", ")} · {m.cuotas} cuota{m.cuotas > 1 ? "s" : ""} vencida{m.cuotas > 1 ? "s" : ""}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-semibold text-red-600">{formatClp(m.total)}</p>
+                    <p className="text-xs text-slate-400">{m.diasAtraso} días de atraso</p>
+                  </div>
+                </li>
+              ))}
+              {cobranza.morosos.length > 8 && (
+                <li className="px-5 py-3 text-center">
+                  <Link
+                    href="/app/cobranza"
+                    className="text-sm font-medium text-brand-600 hover:underline"
+                  >
+                    Ver los {cobranza.morosos.length} en Cobranza →
+                  </Link>
+                </li>
+              )}
+            </ul>
+          )}
+        </Card>
+
+        {/* Vence esta semana */}
+        <Card>
+          <CardHeader
+            title={`Vence esta semana (${cobranza.semana.length})`}
+            subtitle="Próximos 7 días — para cobrar antes del vencimiento."
+          />
+          {cobranza.semana.length === 0 ? (
+            <div className="p-5">
+              <EmptyState title="Sin vencimientos esta semana" />
+            </div>
+          ) : (
+            <ul className="divide-y divide-slate-50">
+              {cobranza.semana.map((r) => (
+                <li
+                  key={r.inst.id}
+                  className="flex items-center justify-between gap-3 px-5 py-3"
+                >
+                  <div className="min-w-0">
+                    <Link
+                      href={`/app/parcelas/${r.inst.parcelId}`}
+                      className="block truncate font-medium text-slate-900 hover:text-brand-600"
+                    >
+                      {r.clientName ?? "—"}
+                    </Link>
+                    <p className="text-xs text-slate-400">
+                      {r.projectName} · {r.parcelCode} · cuota {r.inst.number}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-medium text-slate-800">
+                      {formatClp(r.inst.amountClp)}
+                    </p>
+                    <p className="text-xs text-amber-600">
+                      {new Date(r.inst.dueDate).toLocaleDateString("es-CL")}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      </div>
+
+      {/* ── Finanzas generales ── */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat
           label="Dinero ingresado"
