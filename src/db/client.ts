@@ -10,12 +10,17 @@ const globalForDb = globalThis as unknown as {
 
 function getClient() {
   if (globalForDb.__pg) return globalForDb.__pg;
-  // Acepta DATABASE_URL (local) o POSTGRES_URL (lo que inyecta la integración
-  // Neon/Vercel). Pooled está bien en runtime: usamos prepare:false.
+  // En runtime la app DEBE conectar con un rol SIN bypassrls (app_user) para
+  // que las políticas RLS aíslen por tenant. En Neon, DATABASE_URL/POSTGRES_URL
+  // que inyecta la integración usan el rol dueño (neondb_owner, con bypassrls),
+  // que se salta RLS y mezcla datos entre empresas. Por eso APP_DATABASE_URL
+  // (rol app_user) tiene prioridad; el resto son fallback para dev/local.
   const connectionString =
-    process.env.DATABASE_URL ?? process.env.POSTGRES_URL;
+    process.env.APP_DATABASE_URL ??
+    process.env.DATABASE_URL ??
+    process.env.POSTGRES_URL;
   if (!connectionString) {
-    throw new Error("DATABASE_URL (o POSTGRES_URL) no está definida");
+    throw new Error("APP_DATABASE_URL (o DATABASE_URL/POSTGRES_URL) no está definida");
   }
   const client = postgres(connectionString, {
     max: 10,
