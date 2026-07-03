@@ -21,6 +21,7 @@ import {
   completeProjectUpdate,
   generateLanding,
   saveProjectLegal,
+  updateParcelPrice,
   uploadProjectDocument,
 } from "@/server/actions";
 import { getProjectBySlug, listSellerCompanies } from "@/server/queries";
@@ -192,7 +193,30 @@ export default async function ProjectDetailPage({
                         {parcel.areaM2 ? `${parcel.areaM2} m²` : "—"}
                       </td>
                       <td className="px-5 py-3 text-right text-slate-700">
-                        {formatPrice(parcel.price, parcel.priceUnit)}
+                        {session.role === "super_admin" &&
+                        parcel.status === "disponible" ? (
+                          <form
+                            action={updateParcelPrice}
+                            className="flex items-center justify-end gap-1"
+                          >
+                            <input type="hidden" name="parcelId" value={parcel.id} />
+                            <input
+                              name="price"
+                              inputMode="numeric"
+                              defaultValue={parcel.price ? Number(parcel.price) : ""}
+                              placeholder="precio CLP"
+                              className="w-28 rounded-md border border-slate-200 px-2 py-1 text-right text-sm focus:border-brand-400 focus:outline-none"
+                            />
+                            <button
+                              className="rounded-md bg-brand-50 px-2 py-1 text-xs font-medium text-brand-700 hover:bg-brand-100"
+                              title="Guardar precio"
+                            >
+                              ✓
+                            </button>
+                          </form>
+                        ) : (
+                          formatPrice(parcel.price, parcel.priceUnit)
+                        )}
                       </td>
                       <td className="px-5 py-3">
                         <Badge tone={ps?.tone}>{ps?.label ?? parcel.status}</Badge>

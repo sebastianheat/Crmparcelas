@@ -1972,3 +1972,35 @@ export async function completeProjectUpdate(formData: FormData) {
   if (projectSlug) revalidatePath(`/app/proyectos/${projectSlug}`);
   revalidatePath("/portal");
 }
+
+/**
+ * Cambia el precio de lista de una parcela. Solo super admin (dueño):
+ * pensado para fijar/ajustar precios del stock disponible.
+ */
+export async function updateParcelPrice(formData: FormData) {
+  const session = await requireSession();
+  if (session.role !== "super_admin") {
+    throw new Error("Solo el super admin puede cambiar precios.");
+  }
+  const parcelId = String(formData.get("parcelId"));
+  const raw = String(formData.get("price") || "").replace(/[.$\s]/g, "");
+  const price = raw ? Number(raw) : null;
+  if (price !== null && (!Number.isFinite(price) || price < 0)) {
+    throw new Error("Precio inválido.");
+  }
+  let slug = "";
+  await withCurrentTenant(async (tx) => {
+    const parcel = await tx.query.parcels.findFirst({
+      where: eq(parcels.id, parcelId),
+      with: { project: { columns: { slug: true } } },
+    });
+    if (!parcel) throw new Error("Parcela no encontrada.");
+    slug = parcel.project.slug;
+    await tx
+      .update(parcels)
+      .set({ price: price === null ? null : String(price) })
+      .where(eq(parcels.id, parcelId));
+  });
+  revalidatePath(`/app/proyectos/${slug}`);
+  revalidatePath("/app/proyectos");
+}
