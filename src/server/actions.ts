@@ -236,6 +236,8 @@ export async function applyParcelEvent(formData: FormData) {
   const sellerId = String(formData.get("sellerId") || "") || null;
   const repertorioCode = String(formData.get("repertorioCode") || "") || null;
   const note = String(formData.get("note") || "") || null;
+  const file = formData.get("file");
+  const hasFile = file instanceof File && file.size > 0;
 
   // Para movimientos con dinero, el vendedor responsable es obligatorio.
   if (amountClp && moneyEventTypes.includes(type) && !sellerId) {
@@ -269,6 +271,43 @@ export async function applyParcelEvent(formData: FormData) {
     });
     if (!parcel) throw new Error("Parcela no encontrada");
     projectSlug = parcel.project.slug;
+
+    // Comprobante adjunto (foto/PDF): queda en el evento, en los documentos de
+    // la parcela y en la carpeta del cliente.
+    let comprobanteUrl: string | null = null;
+    if (hasFile) {
+      const f = file as File;
+      const bytes = new Uint8Array(await f.arrayBuffer());
+      comprobanteUrl = await storeFile({
+        tenantId,
+        pathname: `parcelas/${parcelId}/mov-${f.name}`,
+        bytes,
+        contentType: f.type || "application/octet-stream",
+      });
+      (payload as Record<string, unknown>).comprobanteUrl = comprobanteUrl;
+      await tx.insert(parcelDocuments).values({
+        tenantId,
+        parcelId,
+        projectId: parcel.projectId,
+        type: "comprobante",
+        title: f.name,
+        url: comprobanteUrl,
+        status: "recibido",
+        createdByUserId: userId,
+      });
+      const docClient = clientId ?? parcel.currentClientId;
+      if (docClient) {
+        await tx.insert(clientDocuments).values({
+          tenantId,
+          clientId: docClient,
+          type: "comprobante_pago",
+          title: f.name,
+          url: comprobanteUrl,
+          mime: f.type || null,
+          createdByUserId: userId,
+        });
+      }
+    }
 
     const [event] = await tx
       .insert(parcelEvents)

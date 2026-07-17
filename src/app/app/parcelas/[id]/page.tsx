@@ -21,6 +21,7 @@ import {
   markDocumentSigned,
   markInstallmentPaid,
   sendToSignature,
+  uploadInstallmentProof,
 } from "@/server/actions";
 import { getParcel, listClients, listSellers } from "@/server/queries";
 
@@ -177,6 +178,17 @@ export default async function ParcelPage({
             <Field label="Nota">
               <Textarea name="note" rows={2} placeholder="Detalle del movimiento…" />
             </Field>
+            <Field
+              label="Comprobante (foto o PDF, opcional)"
+              hint="Queda en el historial, en los documentos de la parcela y en la carpeta del cliente"
+            >
+              <Input
+                name="file"
+                type="file"
+                accept="application/pdf,image/*"
+                className="file:mr-2 file:rounded-md file:border-0 file:bg-slate-100 file:px-2 file:py-1.5 file:text-xs"
+              />
+            </Field>
             <div className="flex justify-end">
               <Button type="submit">Registrar movimiento</Button>
             </div>
@@ -214,6 +226,16 @@ export default async function ParcelPage({
                     </p>
                     {ev.note && (
                       <p className="mt-1 text-sm text-slate-600">{ev.note}</p>
+                    )}
+                    {typeof ev.payload?.comprobanteUrl === "string" && (
+                      <a
+                        href={ev.payload.comprobanteUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-1 inline-block text-xs font-medium text-brand-600 hover:underline"
+                      >
+                        📎 Ver comprobante
+                      </a>
                     )}
                   </li>
                 ))}
@@ -344,66 +366,178 @@ export default async function ParcelPage({
               <Button type="submit">Crear plan</Button>
             </form>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-100 text-left text-xs uppercase tracking-wide text-slate-400">
-                    <th className="px-3 py-2 font-medium">Cuota</th>
-                    <th className="px-3 py-2 font-medium">Vence</th>
-                    <th className="px-3 py-2 text-right font-medium">Monto</th>
-                    <th className="px-3 py-2 font-medium">Estado</th>
-                    <th className="px-3 py-2" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {parcel.installments.map((c) => {
-                    const overdue = c.overdue;
-                    return (
-                      <tr key={c.id} className="border-b border-slate-50">
-                        <td className="px-3 py-2 font-medium">{c.number}</td>
-                        <td className="px-3 py-2 text-slate-600">
-                          {new Date(c.dueDate).toLocaleDateString("es-CL")}
-                        </td>
-                        <td className="px-3 py-2 text-right">
-                          {formatClp(c.amountClp)}
-                        </td>
-                        <td className="px-3 py-2">
-                          <Badge
-                            tone={
-                              c.status === "pagada"
-                                ? "green"
-                                : overdue
-                                  ? "red"
-                                  : "amber"
-                            }
-                          >
-                            {c.status === "pagada"
-                              ? "Pagada"
-                              : overdue
-                                ? "Vencida"
-                                : "Pendiente"}
-                          </Badge>
-                        </td>
-                        <td className="px-3 py-2 text-right">
-                          {c.status !== "pagada" && (
-                            <form action={markInstallmentPaid}>
-                              <input
-                                type="hidden"
-                                name="installmentId"
-                                value={c.id}
-                              />
-                              <button className="text-xs font-medium text-brand-600 hover:underline">
-                                Marcar pagada
-                              </button>
-                            </form>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            (() => {
+              const cuotasPagadas = parcel.installments.filter(
+                (c) => c.status === "pagada",
+              );
+              const pagadoCuotas = cuotasPagadas.reduce(
+                (a, c) => a + Number(c.amountClp),
+                0,
+              );
+              const pendiente = parcel.installments
+                .filter((c) => c.status === "pendiente")
+                .reduce((a, c) => a + Number(c.amountClp), 0);
+              const pie = Number(parcel.plan!.pieClp ?? 0);
+              const total = Number(parcel.plan!.totalClp ?? 0);
+              const pagadoTotal = pie + pagadoCuotas;
+              const avance = total > 0 ? Math.round((pagadoTotal / total) * 100) : 0;
+              const promesaDoc = parcel.documents.find(
+                (d) => d.type === "promesa",
+              );
+              const conComprobante = parcel.installments.filter(
+                (c) => c.proofUrl,
+              ).length;
+              return (
+                <>
+                  {/* Resumen del crédito directo */}
+                  <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                    <div className="rounded-xl border border-slate-200 p-3">
+                      <p className="text-xs text-slate-400">Valor parcela</p>
+                      <p className="font-semibold text-slate-900">{formatClp(total)}</p>
+                    </div>
+                    <div className="rounded-xl border border-slate-200 p-3">
+                      <p className="text-xs text-slate-400">Pie</p>
+                      <p className="font-semibold text-slate-900">{formatClp(pie)}</p>
+                    </div>
+                    <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-3">
+                      <p className="text-xs text-emerald-600">Pagado ({avance}%)</p>
+                      <p className="font-semibold text-emerald-700">
+                        {formatClp(pagadoTotal)}
+                      </p>
+                      <p className="text-[11px] text-emerald-600/80">
+                        {cuotasPagadas.length}/{parcel.installments.length} cuotas
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-amber-100 bg-amber-50/50 p-3">
+                      <p className="text-xs text-amber-600">Saldo pendiente</p>
+                      <p className="font-semibold text-amber-700">
+                        {formatClp(pendiente)}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-slate-200 p-3">
+                      <p className="text-xs text-slate-400">Promesa</p>
+                      {promesaDoc ? (
+                        <a
+                          href={promesaDoc.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm font-medium text-brand-600 hover:underline"
+                        >
+                          📄 Ver promesa firmada
+                        </a>
+                      ) : (
+                        <p className="text-sm text-slate-400">Sin promesa aún</p>
+                      )}
+                      <p className="text-[11px] text-slate-400">
+                        {conComprobante}/{parcel.installments.length} con comprobante
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-slate-100 text-left text-xs uppercase tracking-wide text-slate-400">
+                          <th className="px-3 py-2 font-medium">Cuota</th>
+                          <th className="px-3 py-2 font-medium">Vence</th>
+                          <th className="px-3 py-2 text-right font-medium">Monto</th>
+                          <th className="px-3 py-2 font-medium">Estado</th>
+                          <th className="px-3 py-2 font-medium">Comprobante</th>
+                          <th className="px-3 py-2" />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {parcel.installments.map((c) => {
+                          const overdue = c.overdue;
+                          return (
+                            <tr key={c.id} className="border-b border-slate-50">
+                              <td className="px-3 py-2 font-medium">{c.number}</td>
+                              <td className="px-3 py-2 text-slate-600">
+                                {new Date(c.dueDate).toLocaleDateString("es-CL")}
+                              </td>
+                              <td className="px-3 py-2 text-right">
+                                {formatClp(c.amountClp)}
+                              </td>
+                              <td className="px-3 py-2">
+                                <Badge
+                                  tone={
+                                    c.status === "pagada"
+                                      ? "green"
+                                      : overdue
+                                        ? "red"
+                                        : "amber"
+                                  }
+                                >
+                                  {c.status === "pagada"
+                                    ? "Pagada"
+                                    : overdue
+                                      ? "Vencida"
+                                      : "Pendiente"}
+                                </Badge>
+                              </td>
+                              <td className="px-3 py-2">
+                                {c.proofUrl ? (
+                                  <a
+                                    href={c.proofUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs font-medium text-brand-600 hover:underline"
+                                  >
+                                    📎 Ver
+                                  </a>
+                                ) : (
+                                  <form
+                                    action={uploadInstallmentProof}
+                                    className="flex items-center gap-1"
+                                  >
+                                    <input
+                                      type="hidden"
+                                      name="installmentId"
+                                      value={c.id}
+                                    />
+                                    <input
+                                      type="file"
+                                      name="file"
+                                      required
+                                      accept="application/pdf,image/*"
+                                      className="w-32 text-[10px] text-slate-500 file:mr-1 file:rounded file:border-0 file:bg-brand-50 file:px-1.5 file:py-0.5 file:text-[10px] file:text-brand-700"
+                                    />
+                                    <button
+                                      className="whitespace-nowrap text-xs font-medium text-slate-500 hover:text-brand-600 hover:underline"
+                                      title={
+                                        c.status === "pagada"
+                                          ? "Adjuntar comprobante"
+                                          : "Sube el comprobante y la cuota queda pagada"
+                                      }
+                                    >
+                                      subir
+                                    </button>
+                                  </form>
+                                )}
+                              </td>
+                              <td className="px-3 py-2 text-right">
+                                {c.status !== "pagada" && (
+                                  <form action={markInstallmentPaid}>
+                                    <input
+                                      type="hidden"
+                                      name="installmentId"
+                                      value={c.id}
+                                    />
+                                    <button className="text-xs font-medium text-brand-600 hover:underline">
+                                      Marcar pagada
+                                    </button>
+                                  </form>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              );
+            })()
           )}
         </div>
       </Card>
