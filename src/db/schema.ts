@@ -136,6 +136,7 @@ export const costCategoryEnum = pgEnum("cost_category", [
   "legal",
   "comisiones",
   "operacional",
+  "remuneraciones",
   "otros",
 ]);
 

@@ -189,5 +189,6 @@ export const COST_CATEGORY_LABELS: Record<string, string> = {
   legal: "Legal",
   comisiones: "Comisiones",
   operacional: "Operacional",
+  remuneraciones: "Remuneraciones",
   otros: "Otros",
 };
