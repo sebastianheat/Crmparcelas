@@ -81,6 +81,7 @@ const NAV: { section: string; items: NavItem[] }[] = [
       { href: "/app/recordatorios", label: "Recordatorios", icon: "◔" },
       { href: "/app/conciliacion", label: "Conciliación", icon: "⇄" },
       { href: "/app/flujo-caja", label: "Flujo de caja", icon: "≈" },
+      { href: "/app/contabilidad", label: "Contabilidad", icon: "Σ" },
       { href: "/app/comisiones", label: "Comisiones", icon: "％" },
       { href: "/app/costos", label: "Costos", icon: "▸" },
       { href: "/app/reportes", label: "Reportes", icon: "▥" },
@@ -109,7 +110,8 @@ function canSee(role: Role, href: string): boolean {
       can(role, "settings:write")) &&
     ((href !== "/app/comisiones" &&
       href !== "/app/conciliacion" &&
-      href !== "/app/flujo-caja") ||
+      href !== "/app/flujo-caja" &&
+      href !== "/app/contabilidad") ||
       can(role, "finance:read")) &&
     ((href !== "/app/crm" &&
       href !== "/app/whatsapp" &&
