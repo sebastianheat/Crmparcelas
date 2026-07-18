@@ -1,0 +1,1 @@
+ALTER TABLE "parcels" ADD COLUMN "promesa_date" timestamp with time zone;

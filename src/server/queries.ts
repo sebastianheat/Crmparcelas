@@ -956,3 +956,137 @@ export function getDashboard() {
     };
   });
 }
+
+// ─── Contabilidad (informe para el contador) ──────────────────────────────────
+
+/**
+ * Balance de ventas prometidas y anticipos de precio recibidos.
+ * Sin escrituras firmadas, todo pago de cliente es un ANTICIPO (adelanto de
+ * precio); la venta contable se devenga al escriturar. El informe entrega:
+ *  - Libro de ventas prometidas (por parcela/cliente, con fecha de promesa)
+ *  - Ingresos percibidos por mes (cuotas pagadas + otros comprobantes)
+ *  - Costos (p. ej., compra del campo)
+ */
+export function getContabilidad() {
+  return withCurrentTenant(async (tx) => {
+    const [parcelsAll, plans, insts, vouchers, costsAll] = await Promise.all([
+      tx.query.parcels.findMany({
+        with: {
+          currentClient: true,
+          project: { columns: { name: true } },
+        },
+      }),
+      tx.query.paymentPlans.findMany(),
+      tx.query.installments.findMany(),
+      tx.query.moneyVouchers.findMany(),
+      tx.query.costs.findMany(),
+    ]);
+    const n = (v: string | number | null | undefined) => toNumber(v ?? null) ?? 0;
+    const planByParcel = new Map(plans.map((p) => [p.parcelId, p]));
+    const instByParcel = new Map<string, typeof insts>();
+    for (const i of insts) {
+      (instByParcel.get(i.parcelId) ?? instByParcel.set(i.parcelId, []).get(i.parcelId)!).push(i);
+    }
+    // Vouchers ya contados como cuota (evita doble conteo)
+    const cuotaVoucherIds = new Set(insts.map((i) => i.voucherId).filter(Boolean));
+
+    // ── Libro de ventas prometidas ──
+    const libro = parcelsAll
+      .filter((p) => p.currentClientId)
+      .map((p) => {
+        const plan = planByParcel.get(p.id);
+        const cuotas = instByParcel.get(p.id) ?? [];
+        const pagadoCuotas = cuotas
+          .filter((c) => c.status === "pagada")
+          .reduce((a, c) => a + n(c.amountClp), 0);
+        const pendiente = cuotas
+          .filter((c) => c.status === "pendiente")
+          .reduce((a, c) => a + n(c.amountClp), 0);
+        const pie = n(plan?.pieClp);
+        const valor = plan ? n(plan.totalClp) : n(p.price);
+        // Contado: sin plan de cuotas → se asume precio pagado al contado.
+        const pagado = plan ? pie + pagadoCuotas : valor;
+        return {
+          parcelId: p.id,
+          code: p.code,
+          projectName: p.project?.name ?? "",
+          clientName: p.currentClient?.name ?? "",
+          clientRut: p.currentClient?.rut ?? "",
+          promesaDate: p.promesaDate,
+          formaPago: plan ? "credito" : "contado",
+          valor,
+          pie,
+          pagado,
+          saldo: plan ? pendiente : 0,
+          nCuotas: cuotas.length,
+          cuotasPagadas: cuotas.filter((c) => c.status === "pagada").length,
+        };
+      })
+      .sort((a, b) => a.code.localeCompare(b.code, "es", { numeric: true }));
+
+    // ── Series mensuales ──
+    const ym = (d: Date | string) => {
+      const x = new Date(d);
+      return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}`;
+    };
+    const meses = new Map<
+      string,
+      { ventasN: number; ventasClp: number; anticiposClp: number }
+    >();
+    const bucket = (k: string) => {
+      if (!meses.has(k)) meses.set(k, { ventasN: 0, ventasClp: 0, anticiposClp: 0 });
+      return meses.get(k)!;
+    };
+    let ventasSinFechaN = 0;
+    let ventasSinFechaClp = 0;
+    for (const v of libro) {
+      if (v.promesaDate) {
+        const b = bucket(ym(v.promesaDate));
+        b.ventasN += 1;
+        b.ventasClp += v.valor;
+      } else {
+        ventasSinFechaN += 1;
+        ventasSinFechaClp += v.valor;
+      }
+    }
+    for (const c of insts) {
+      if (c.status !== "pagada") continue;
+      bucket(ym(c.paidAt ?? c.dueDate)).anticiposClp += n(c.amountClp);
+    }
+    for (const v of vouchers) {
+      if (cuotaVoucherIds.has(v.id)) continue;
+      bucket(ym(v.issuedAt)).anticiposClp += n(v.amountClp);
+    }
+    const mensual = [...meses.entries()]
+      .map(([mes, d]) => ({ mes, ...d }))
+      .sort((a, b) => a.mes.localeCompare(b.mes));
+
+    // ── Totales ──
+    const totals = {
+      prometido: libro.reduce((a, v) => a + v.valor, 0),
+      anticipos: libro.reduce((a, v) => a + v.pagado, 0),
+      porCobrar: libro.reduce((a, v) => a + v.saldo, 0),
+      ventas: libro.length,
+      credito: libro.filter((v) => v.formaPago === "credito").length,
+      contado: libro.filter((v) => v.formaPago === "contado").length,
+      costos: costsAll.reduce((a, c) => a + n(c.amountClp), 0),
+      conFechaPromesa: libro.filter((v) => v.promesaDate).length,
+    };
+
+    return {
+      libro,
+      mensual,
+      ventasSinFecha: { n: ventasSinFechaN, clp: ventasSinFechaClp },
+      totals,
+      costos: costsAll
+        .map((c) => ({
+          id: c.id,
+          category: c.category,
+          amountClp: n(c.amountClp),
+          description: c.description,
+          incurredAt: c.incurredAt,
+        }))
+        .sort((a, b) => new Date(a.incurredAt).getTime() - new Date(b.incurredAt).getTime()),
+    };
+  });
+}

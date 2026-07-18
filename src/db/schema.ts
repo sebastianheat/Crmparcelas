@@ -412,6 +412,9 @@ export const parcels = pgTable(
     currentClientId: uuid("current_client_id").references(() => clients.id, {
       onDelete: "set null",
     }),
+    // Fecha de firma de la promesa vigente (extraída del PDF o manual).
+    // Base del libro de ventas prometidas en Contabilidad.
+    promesaDate: timestamp("promesa_date", { withTimezone: true }),
     deslindes: text("deslindes"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
