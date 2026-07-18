@@ -183,6 +183,13 @@
       "when": 1784329503124,
       "tag": "0025_natural_ender_wiggin",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1784398213213,
+      "tag": "0026_massive_wonder_man",
+      "breakpoints": true
     }
   ]
 }
