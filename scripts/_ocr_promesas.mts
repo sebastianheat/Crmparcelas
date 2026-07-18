@@ -38,7 +38,7 @@ function findDate(text: string): string | null {
 
 function ocrPage(pdf: string, page: number): string {
   try {
-    execFileSync("pdftoppm", ["-f", String(page), "-l", String(page), "-r", "150", pdf, `${TMP}/pg`], { timeout: 60000 });
+    execFileSync("pdftoppm", ["-f", String(page), "-l", String(page), "-scale-to", "1500", pdf, `${TMP}/pg`], { timeout: 60000 });
     const ppm = readdirSync(TMP).find((f) => f.startsWith("pg") && f.endsWith(".ppm"));
     if (!ppm) return "";
     execFileSync("tesseract", [`${TMP}/${ppm}`, `${TMP}/out`, "-l", "spa", "--psm", "6"], { timeout: 120000 });
