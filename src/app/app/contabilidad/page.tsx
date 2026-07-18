@@ -270,6 +270,13 @@ export default async function ContabilidadPage() {
                 <strong>⚠ Pendiente con el SII:</strong> {String(sii.informe.anotaciones)}
               </div>
             ) : null}
+            {Array.isArray(sii.informe?.notas) && sii.informe.notas.length > 0 && (
+              <ul className="space-y-1 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+                {(sii.informe.notas as string[]).map((n, i) => (
+                  <li key={i}>📝 {n}</li>
+                ))}
+              </ul>
+            )}
 
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="rounded-xl border border-slate-200 p-3 text-sm">
