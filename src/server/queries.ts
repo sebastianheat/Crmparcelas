@@ -1090,3 +1090,46 @@ export function getContabilidad() {
     };
   });
 }
+
+/**
+ * Situación tributaria (SII) de la empresa activa: declaraciones F29 por
+ * período con folios y pagos, totales del Registro de Compras y Ventas, y el
+ * resumen del informe (anotaciones, F29 pendientes, bienes raíces).
+ * Devuelve null si el tenant no tiene documentos tributarios cargados.
+ */
+export function getSiiResumen() {
+  return withCurrentTenant(async (tx) => {
+    const docs = await tx.query.taxDocuments.findMany();
+    if (docs.length === 0) return null;
+    const m = (d: (typeof docs)[number]) => (d.meta ?? {}) as Record<string, any>;
+
+    const periods = new Map<string, any>();
+    const bucket = (p: string) => {
+      if (!periods.has(p)) periods.set(p, { period: p });
+      return periods.get(p)!;
+    };
+    for (const d of docs) {
+      if (!d.period) continue;
+      const b = bucket(d.period);
+      if (d.kind === "f29_cert") {
+        b.f29 = { url: d.url, folio: m(d).folio, fecha: m(d).fecha, pago: m(d).c91 ?? null };
+      } else if (d.kind === "f29" && !b.f29Form) b.f29Form = d.url;
+      else if (d.kind === "rcv_venta_resumen") b.ventas = { ...m(d), url: d.url };
+      else if (d.kind === "rcv_venta" && !b.ventas) b.ventas = { ...m(d), url: d.url };
+      else if (d.kind === "rcv_compra_resumen") b.compras = { ...m(d), url: d.url };
+      else if (d.kind === "rcv_compra" && !b.compras) b.compras = { ...m(d), url: d.url };
+    }
+    const informe = docs.find((d) => d.kind === "informe");
+    const otros = docs
+      .filter((d) => !d.period && d.kind !== "informe")
+      .map((d) => ({ title: d.title, url: d.url, kind: d.kind }));
+    return {
+      periodos: [...periods.values()].sort((a, b) => b.period.localeCompare(a.period)),
+      informe: informe
+        ? ({ url: informe.url, ...m(informe) } as { url: string } & Record<string, any>)
+        : null,
+      otros,
+      total: docs.length,
+    };
+  });
+}

@@ -1,6 +1,6 @@
 import { Card, CardHeader, EmptyState, LinkButton, Stat } from "@/components/ui";
 import { formatClp } from "@/lib/money";
-import { getContabilidad } from "@/server/queries";
+import { getContabilidad, getSiiResumen } from "@/server/queries";
 
 export const metadata = { title: "Contabilidad — 5000" };
 
@@ -14,7 +14,10 @@ function mesLabel(ym: string) {
 }
 
 export default async function ContabilidadPage() {
-  const { libro, mensual, ventasSinFecha, totals, costos } = await getContabilidad();
+  const [{ libro, mensual, ventasSinFecha, totals, costos }, sii] = await Promise.all([
+    getContabilidad(),
+    getSiiResumen(),
+  ]);
   const resultado = totals.anticipos - totals.costos;
 
   // Agrupar meses por año para subtotales
@@ -253,6 +256,119 @@ export default async function ContabilidadPage() {
           </ul>
         )}
       </Card>
+
+      {/* Situación tributaria SII */}
+      {sii && (
+        <Card>
+          <CardHeader
+            title="Situación tributaria (SII)"
+            subtitle={`Declaraciones y registros oficiales del SII — ${sii.total} documentos cargados.`}
+          />
+          <div className="space-y-5 p-5">
+            {sii.informe?.anotaciones ? (
+              <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+                <strong>⚠ Pendiente con el SII:</strong> {String(sii.informe.anotaciones)}
+              </div>
+            ) : null}
+
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="rounded-xl border border-slate-200 p-3 text-sm">
+                <p className="text-xs text-slate-400">Régimen</p>
+                <p className="font-medium text-slate-800">{String(sii.informe?.regimen ?? "—")}</p>
+                <p className="text-xs text-slate-400">Inicio actividades: {String(sii.informe?.inicioActividades ?? "—")}</p>
+              </div>
+              <div className="rounded-xl border border-slate-200 p-3 text-sm">
+                <p className="text-xs text-slate-400">F22 Renta AT2025</p>
+                <p className="font-medium text-slate-800">
+                  Folio {String((sii.informe?.f22 as Record<string, Record<string, unknown>>)?.at2025?.folio ?? "—")} · IDPC{" "}
+                  {formatClp(Number((sii.informe?.f22 as Record<string, Record<string, unknown>>)?.at2025?.idpc ?? 0))}
+                </p>
+                <p className="text-xs text-slate-400">AT2026: {String((sii.informe?.f22 as Record<string, unknown>)?.at2026 ?? "—")}</p>
+              </div>
+              <div className="rounded-xl border border-slate-200 p-3 text-sm">
+                <p className="text-xs text-slate-400">Bienes raíces (avalúo fiscal)</p>
+                {(sii.informe?.bienesRaices as { rol: string; comuna: string; avaluo: number }[] | undefined)?.map((b) => (
+                  <p key={b.rol} className="text-slate-700">
+                    {b.comuna} rol {b.rol}: <span className="font-medium">{formatClp(b.avaluo)}</span>
+                  </p>
+                ))}
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-100 text-left text-xs uppercase tracking-wide text-slate-400">
+                    <th className="px-4 py-2 font-medium">Período</th>
+                    <th className="px-4 py-2 font-medium">F29</th>
+                    <th className="px-4 py-2 text-right font-medium">Pago F29</th>
+                    <th className="px-4 py-2 text-right font-medium">Ventas RCV (neto+exento)</th>
+                    <th className="px-4 py-2 text-right font-medium">Compras RCV (neto)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(sii.informe?.f29Pendientes as string[] | undefined)?.map((p) => (
+                    <tr key={p} className="border-b border-slate-50 bg-red-50/60 text-red-700">
+                      <td className="px-4 py-2 font-medium">{p}</td>
+                      <td className="px-4 py-2" colSpan={4}>
+                        ✗ NO PRESENTADO — regularizar para evitar bloqueo de DTE
+                      </td>
+                    </tr>
+                  ))}
+                  {sii.periodos.map((p) => (
+                    <tr key={p.period} className="border-b border-slate-50">
+                      <td className="px-4 py-2 font-medium text-slate-800">{p.period}</td>
+                      <td className="px-4 py-2">
+                        {p.f29 ? (
+                          <a href={p.f29.url} target="_blank" rel="noopener noreferrer" className="text-brand-600 hover:underline">
+                            ✓ folio {String(p.f29.folio ?? "")}
+                          </a>
+                        ) : (
+                          <span className="text-slate-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2 text-right text-slate-700">
+                        {p.f29?.pago ? formatClp(Number(p.f29.pago)) : "—"}
+                      </td>
+                      <td className="px-4 py-2 text-right text-emerald-700">
+                        {p.ventas ? (
+                          <a href={p.ventas.url} className="hover:underline" target="_blank" rel="noopener noreferrer">
+                            {formatClp(Number(p.ventas.neto ?? 0) + Number(p.ventas.exento ?? 0))}
+                          </a>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                      <td className="px-4 py-2 text-right text-slate-700">
+                        {p.compras ? (
+                          <a href={p.compras.url} className="hover:underline" target="_blank" rel="noopener noreferrer">
+                            {formatClp(Number(p.compras.neto ?? 0))}
+                          </a>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex flex-wrap gap-3 text-sm">
+              {sii.informe && (
+                <a href={sii.informe.url} target="_blank" rel="noopener noreferrer" className="font-medium text-brand-600 hover:underline">
+                  📄 Informe tributario completo
+                </a>
+              )}
+              {sii.otros.map((d) => (
+                <a key={d.url} href={d.url} target="_blank" rel="noopener noreferrer" className="text-slate-500 hover:text-brand-600 hover:underline">
+                  📎 {d.title}
+                </a>
+              ))}
+            </div>
+          </div>
+        </Card>
+      )}
     </div>
   );
 }

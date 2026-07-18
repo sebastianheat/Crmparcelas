@@ -1018,6 +1018,34 @@ export const projectUpdates = pgTable(
   ],
 );
 
+
+// ─── Documentos tributarios (SII) por empresa ─────────────────────────────────
+// F29, certificados, RCV (registro de compras/ventas), F22, informes. La meta
+// guarda lo parseado (folios, montos por período) para la sección Contabilidad.
+
+export const taxDocuments = pgTable(
+  "tax_documents",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(), // f29 | f29_cert | rcv_compra | rcv_compra_resumen | rcv_venta | rcv_venta_resumen | f22 | informe | otro
+    period: text("period"), // YYYY-MM cuando aplica
+    title: text("title").notNull(),
+    url: text("url").notNull(),
+    mime: text("mime"),
+    meta: jsonb("meta").$type<Record<string, unknown>>().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    index("tax_documents_tenant_idx").on(t.tenantId),
+    index("tax_documents_period_idx").on(t.period),
+  ],
+);
+
 // ─── M3 — Conciliación bancaria (open banking: Fintoc) ────────────────────────
 
 export const bankMovementStatusEnum = pgEnum("bank_movement_status", [
@@ -1227,6 +1255,7 @@ export type LegalCase = typeof legalCases.$inferSelect;
 export type BankMovement = typeof bankMovements.$inferSelect;
 export type PaymentIntent = typeof paymentIntents.$inferSelect;
 export type ProjectUpdate = typeof projectUpdates.$inferSelect;
+export type TaxDocument = typeof taxDocuments.$inferSelect;
 export type ClientDocument = typeof clientDocuments.$inferSelect;
 export type Lead = typeof leads.$inferSelect;
 export type LeadActivity = typeof leadActivities.$inferSelect;
@@ -1259,6 +1288,7 @@ export const TENANT_SCOPED_TABLES = [
   "ghl_snapshots",
   "payment_intents",
   "project_updates",
+  "tax_documents",
 ] as const;
 
 export { sql };
