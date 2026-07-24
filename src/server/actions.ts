@@ -29,6 +29,7 @@ import {
   parcels,
   paymentIntents,
   paymentPlans,
+  auditLog,
   projectDocuments,
   projectUpdates,
   projects,
@@ -999,7 +1000,16 @@ export async function markInstallmentPaid(formData: FormData) {
       columns: { parcelId: true },
     });
     parcelId = inst?.parcelId ?? "";
-    await payInstallment(tx, tenantId, installmentId, { userId });
+    const paid = await payInstallment(tx, tenantId, installmentId, { userId });
+    if (paid) {
+      await logAudit(tx, { tenantId, userId }, {
+        action: "pagar_cuota_sin_comprobante",
+        entity: "installment",
+        entityId: installmentId,
+        parcelId,
+        detail: "Cuota marcada pagada sin archivo adjunto.",
+      });
+    }
   });
   if (parcelId) revalidatePath(`/app/parcelas/${parcelId}`);
   revalidatePath("/app/cobranza");
@@ -1915,11 +1925,18 @@ export async function uploadInstallmentProof(formData: FormData) {
       contentType: file.type || "application/octet-stream",
     });
     // Sube comprobante + marca la cuota pagada (genera comprobante de dinero).
-    await payInstallment(tx, tenantId, installmentId, { userId });
+    const paid = await payInstallment(tx, tenantId, installmentId, { userId });
     await tx
       .update(installments)
       .set({ proofUrl: url })
       .where(eq(installments.id, installmentId));
+    await logAudit(tx, { tenantId, userId }, {
+      action: paid ? "pagar_cuota_con_comprobante" : "subir_comprobante",
+      entity: "installment",
+      entityId: installmentId,
+      parcelId,
+      detail: `Cuota ${inst.number}: ${paid ? "pagada con" : "se adjuntó"} comprobante (${file.name}).`,
+    });
   });
   if (parcelId) revalidatePath(`/app/parcelas/${parcelId}`);
   revalidatePath("/app/cobranza");
@@ -2042,4 +2059,100 @@ export async function updateParcelPrice(formData: FormData) {
   });
   revalidatePath(`/app/proyectos/${slug}`);
   revalidatePath("/app/proyectos");
+}
+
+// ─── Correcciones de cobranza (reunión 20-07-2026) ────────────────────────────
+
+/** Registra en la auditoría quién hizo qué (trazabilidad de gestión). */
+async function logAudit(
+  tx: Parameters<Parameters<typeof withCurrentTenant>[0]>[0],
+  ctx: { tenantId: string; userId: string | null },
+  entry: { action: string; entity: string; entityId?: string | null; parcelId?: string | null; detail?: string },
+) {
+  const user = ctx.userId
+    ? await tx.query.users.findFirst({ where: eq(users.id, ctx.userId), columns: { name: true } })
+    : null;
+  await tx.insert(auditLog).values({
+    tenantId: ctx.tenantId,
+    userId: ctx.userId,
+    userName: user?.name ?? null,
+    action: entry.action,
+    entity: entry.entity,
+    entityId: entry.entityId ?? null,
+    parcelId: entry.parcelId ?? null,
+    detail: entry.detail ?? null,
+  });
+}
+
+/**
+ * Desmarca una cuota pagada (vuelve a pendiente) — para corregir errores de
+ * marcado. Anula el comprobante de dinero asociado y queda en la auditoría.
+ * El archivo del comprobante (si había) se conserva para poder reemplazarlo.
+ */
+export async function unmarkInstallmentPaid(formData: FormData) {
+  await requirePermission("billing:write");
+  const installmentId = String(formData.get("installmentId"));
+  let parcelId = "";
+  await withCurrentTenant(async (tx, { tenantId, userId }) => {
+    const inst = await tx.query.installments.findFirst({
+      where: eq(installments.id, installmentId),
+    });
+    if (!inst) throw new Error("Cuota no encontrada.");
+    if (inst.status !== "pagada") throw new Error("La cuota no está pagada.");
+    parcelId = inst.parcelId;
+    if (inst.voucherId) {
+      await tx
+        .update(moneyVouchers)
+        .set({ status: "anulado" })
+        .where(eq(moneyVouchers.id, inst.voucherId));
+    }
+    await tx
+      .update(installments)
+      .set({ status: "pendiente", paidAt: null, voucherId: null })
+      .where(eq(installments.id, installmentId));
+    await logAudit(tx, { tenantId, userId }, {
+      action: "desmarcar_cuota",
+      entity: "installment",
+      entityId: installmentId,
+      parcelId,
+      detail: `Cuota ${inst.number} vuelve a pendiente (era pagada${inst.voucherId ? ", comprobante de dinero anulado" : ""}). El archivo adjunto se conserva.`,
+    });
+  });
+  if (parcelId) revalidatePath(`/app/parcelas/${parcelId}`);
+  revalidatePath("/app/cobranza");
+  revalidatePath("/app");
+}
+
+/** Reemplaza el archivo de comprobante de una cuota (sin tocar su estado). */
+export async function replaceInstallmentProof(formData: FormData) {
+  await requirePermission("billing:write");
+  const installmentId = String(formData.get("installmentId"));
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) throw new Error("Adjunta el archivo.");
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let parcelId = "";
+  await withCurrentTenant(async (tx, { tenantId, userId }) => {
+    const inst = await tx.query.installments.findFirst({
+      where: eq(installments.id, installmentId),
+      columns: { parcelId: true, number: true, proofUrl: true },
+    });
+    if (!inst) throw new Error("Cuota no encontrada.");
+    parcelId = inst.parcelId;
+    const url = await storeFile({
+      tenantId,
+      pathname: `cobranza/${installmentId}/${file.name}`,
+      bytes,
+      contentType: file.type || "application/octet-stream",
+    });
+    await tx.update(installments).set({ proofUrl: url }).where(eq(installments.id, installmentId));
+    await logAudit(tx, { tenantId, userId }, {
+      action: inst.proofUrl ? "reemplazar_comprobante" : "subir_comprobante",
+      entity: "installment",
+      entityId: installmentId,
+      parcelId,
+      detail: `Cuota ${inst.number}: comprobante ${inst.proofUrl ? "reemplazado" : "adjuntado"} (${file.name}).`,
+    });
+  });
+  if (parcelId) revalidatePath(`/app/parcelas/${parcelId}`);
+  revalidatePath("/app/cobranza");
 }

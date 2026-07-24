@@ -11,6 +11,7 @@ import { can } from "@/lib/roles";
 import { requireSession } from "@/lib/session";
 import { createClient } from "@/server/actions";
 import { listClients } from "@/server/queries";
+import { ClientList } from "./client-list";
 
 export default async function ClientsPage() {
   const session = await requireSession();
@@ -74,46 +75,7 @@ export default async function ClientsPage() {
             <EmptyState title="Sin clientes" />
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-100 text-left text-xs uppercase tracking-wide text-slate-400">
-                  <th className="px-5 py-3 font-medium">Nombre</th>
-                  <th className="px-5 py-3 font-medium">RUT</th>
-                  <th className="px-5 py-3 font-medium">Estado civil</th>
-                  <th className="px-5 py-3 font-medium">Profesión</th>
-                  <th className="px-5 py-3 font-medium">Contacto</th>
-                </tr>
-              </thead>
-              <tbody>
-                {clients.map((c) => (
-                  <tr key={c.id} className="border-b border-slate-50">
-                    <td className="px-5 py-3 font-medium">
-                      <Link
-                        href={`/app/clientes/${c.id}`}
-                        className="text-slate-900 hover:text-brand-600"
-                      >
-                        {c.name}
-                      </Link>
-                      {c.direccion && (
-                        <div className="text-xs text-slate-400">{c.direccion}</div>
-                      )}
-                    </td>
-                    <td className="px-5 py-3 text-slate-600">{c.rut ?? "—"}</td>
-                    <td className="px-5 py-3 text-slate-600">
-                      {c.estadoCivil ?? "—"}
-                    </td>
-                    <td className="px-5 py-3 text-slate-600">
-                      {c.profesion ?? "—"}
-                    </td>
-                    <td className="px-5 py-3 text-slate-600">
-                      {c.email ?? c.phone ?? "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <ClientList clients={clients} />
         )}
       </Card>
     </div>
