@@ -27,6 +27,44 @@ export default async function CobranzaPage() {
   const sumaGrupo = (filas: Fila[]) =>
     filas.reduce((a, f) => a + Number(f.inst.amountClp), 0);
 
+  // Contacto directo del cliente (reunión: llamar/escribir sin entrar a la parcela)
+  const Contacto = ({ r }: { r: Fila }) => (
+    <span className="inline-flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs font-normal">
+      {r.clientRut && <span className="text-slate-400">{r.clientRut}</span>}
+      {r.clientPhone ? (
+        <>
+          <a
+            href={`tel:${r.clientPhone}`}
+            className="font-medium text-brand-600 hover:underline"
+            title="Llamar"
+          >
+            📞 {r.clientPhone}
+          </a>
+          <a
+            href={`https://wa.me/${r.clientPhone.replace(/\D/g, "")}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium text-emerald-600 hover:underline"
+            title="Abrir WhatsApp"
+          >
+            WhatsApp
+          </a>
+        </>
+      ) : (
+        <span className="font-medium text-red-500">sin teléfono ⚠</span>
+      )}
+      {r.clientEmail && (
+        <a
+          href={`mailto:${r.clientEmail}`}
+          className="text-slate-500 hover:text-brand-600 hover:underline"
+          title="Enviar correo"
+        >
+          ✉ {r.clientEmail}
+        </a>
+      )}
+    </span>
+  );
+
   const Row = ({
     r,
     overdue,
@@ -47,6 +85,7 @@ export default async function CobranzaPage() {
           "—"
         )}
         <div className="text-xs text-slate-400">{r.clientName ?? "—"}</div>
+        <Contacto r={r} />
       </td>
       <td className="px-5 py-3 text-slate-600">Cuota {r.inst.number}</td>
       <td className="px-5 py-3">
@@ -183,17 +222,20 @@ export default async function CobranzaPage() {
                     <Fragment key={g.inst.parcelId ?? g.inst.id}>
                       <tr className="border-b border-slate-100 bg-slate-50/80">
                         <td colSpan={3} className="px-5 py-2.5">
-                          <span className="font-semibold text-slate-900">
-                            {g.clientName ?? "Sin cliente"}
-                          </span>
-                          {g.parcelCode && (
-                            <Link
-                              href={`/app/parcelas/${g.inst.parcelId}`}
-                              className="ml-2 text-xs font-medium text-brand-600 hover:underline"
-                            >
-                              {g.projectName} · {g.parcelCode}
-                            </Link>
-                          )}
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                            <span className="font-semibold text-slate-900">
+                              {g.clientName ?? "Sin cliente"}
+                            </span>
+                            {g.parcelCode && (
+                              <Link
+                                href={`/app/parcelas/${g.inst.parcelId}`}
+                                className="text-xs font-medium text-brand-600 hover:underline"
+                              >
+                                {g.projectName} · {g.parcelCode}
+                              </Link>
+                            )}
+                            <Contacto r={g} />
+                          </div>
                         </td>
                         <td className="px-5 py-2.5 text-right text-xs font-semibold text-red-600">
                           {filas.length} cuota{filas.length > 1 ? "s" : ""} ·{" "}
