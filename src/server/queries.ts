@@ -346,6 +346,9 @@ export function getCobranza() {
         parcelCode: parcels.code,
         projectName: projects.name,
         clientName: clients.name,
+        clientRut: clients.rut,
+        clientPhone: clients.phone,
+        clientEmail: clients.email,
       })
       .from(installments)
       .leftJoin(parcels, eq(installments.parcelId, parcels.id))
