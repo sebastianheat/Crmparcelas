@@ -1,6 +1,7 @@
 import { and, count, desc, eq, inArray, lte, sum } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import {
+  auditLog,
   clients,
   bankMovements,
   clientDocuments,
@@ -186,7 +187,29 @@ export function getParcel(id: string) {
       overdue:
         c.status === "pendiente" && new Date(c.dueDate).getTime() < now,
     }));
-    return { ...parcel, documents, plan: plan ?? null, installments: planInstallments };
+    // Vendedor responsable (último evento con vendedor) — reunión 20-07-2026.
+    const sellerEvent = await tx
+      .select({ sellerUserId: parcelEvents.sellerUserId, name: users.name })
+      .from(parcelEvents)
+      .leftJoin(users, eq(parcelEvents.sellerUserId, users.id))
+      .where(eq(parcelEvents.parcelId, id))
+      .orderBy(desc(parcelEvents.createdAt))
+      .limit(10);
+    const vendedor = sellerEvent.find((e) => e.sellerUserId)?.name ?? null;
+    // Historial de cambios de gestión (auditoría).
+    const audit = await tx.query.auditLog.findMany({
+      where: eq(auditLog.parcelId, id),
+      orderBy: desc(auditLog.createdAt),
+      limit: 30,
+    });
+    return {
+      ...parcel,
+      documents,
+      plan: plan ?? null,
+      installments: planInstallments,
+      vendedor,
+      audit,
+    };
   });
 }
 

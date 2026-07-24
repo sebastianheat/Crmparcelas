@@ -4,7 +4,6 @@ import { Card, CardHeader, EmptyState, Stat } from "@/components/ui";
 import { formatClp } from "@/lib/money";
 import {
   createCuotaPaymentLink,
-  markInstallmentPaid,
   uploadInstallmentProof,
 } from "@/server/actions";
 import { getCobranza } from "@/server/queries";
@@ -88,15 +87,10 @@ export default async function CobranzaPage() {
               className="w-28 text-[10px] text-slate-500 file:mr-1 file:rounded file:border-0 file:bg-brand-50 file:px-1.5 file:py-0.5 file:text-[10px] file:text-brand-700"
             />
             <button className="text-xs font-medium text-slate-500 hover:text-brand-600 hover:underline">
-              subir
+              pagar con comprobante
             </button>
           </form>
-          <form action={markInstallmentPaid}>
-            <input type="hidden" name="installmentId" value={r.inst.id} />
-            <button className="text-xs font-medium text-brand-600 hover:underline">
-              Marcar pagada
-            </button>
-          </form>
+
         </div>
       </td>
     </tr>
@@ -143,15 +137,10 @@ export default async function CobranzaPage() {
               className="w-28 text-[10px] text-slate-500 file:mr-1 file:rounded file:border-0 file:bg-brand-50 file:px-1.5 file:py-0.5 file:text-[10px] file:text-brand-700"
             />
             <button className="text-xs font-medium text-slate-500 hover:text-brand-600 hover:underline">
-              subir
+              pagar con comprobante
             </button>
           </form>
-          <form action={markInstallmentPaid}>
-            <input type="hidden" name="installmentId" value={r.inst.id} />
-            <button className="text-xs font-medium text-brand-600 hover:underline">
-              Marcar pagada
-            </button>
-          </form>
+
         </div>
       </td>
     </tr>
@@ -160,6 +149,9 @@ export default async function CobranzaPage() {
   return (
     <div className="space-y-6">
       <div>
+        <Link href="/app" className="text-sm text-slate-400 hover:underline">
+          ← Volver al dashboard
+        </Link>
         <h1 className="text-xl font-semibold text-slate-900">Cobranza</h1>
         <p className="text-sm text-slate-500">
           Crédito directo: cuotas por vencer, vencidas y recaudación.

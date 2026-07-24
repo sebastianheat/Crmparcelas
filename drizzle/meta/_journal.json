@@ -197,6 +197,13 @@
       "when": 1784405680120,
       "tag": "0027_natural_marvex",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1784897994947,
+      "tag": "0028_sad_black_tarantula",
+      "breakpoints": true
     }
   ]
 }

@@ -19,9 +19,10 @@ import {
   createPaymentPlan,
   generatePromesa,
   markDocumentSigned,
-  markInstallmentPaid,
   sendToSignature,
+  unmarkInstallmentPaid,
   uploadInstallmentProof,
+  replaceInstallmentProof,
 } from "@/server/actions";
 import { getParcel, listClients, listSellers } from "@/server/queries";
 
@@ -78,6 +79,51 @@ export default async function ParcelPage({
           ← Proyecto
         </LinkButton>
       </div>
+
+      {/* Cliente de la parcela (reunión 20-07-2026: datos a la vista) */}
+      {parcel.currentClient && (
+        <Card className="p-4">
+          <div className="flex flex-wrap items-center gap-x-8 gap-y-2 text-sm">
+            <div>
+              <p className="text-xs text-slate-400">Cliente</p>
+              <Link
+                href={`/app/clientes/${parcel.currentClient.id}`}
+                className="text-base font-semibold text-slate-900 hover:text-brand-600"
+              >
+                {parcel.currentClient.name}
+              </Link>
+            </div>
+            <div>
+              <p className="text-xs text-slate-400">RUT</p>
+              <p className="font-medium text-slate-700">{parcel.currentClient.rut ?? "—"}</p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-400">Teléfono</p>
+              {parcel.currentClient.phone ? (
+                <a href={`tel:${parcel.currentClient.phone}`} className="font-medium text-brand-600 hover:underline">
+                  {parcel.currentClient.phone}
+                </a>
+              ) : (
+                <p className="font-medium text-red-500">falta ⚠</p>
+              )}
+            </div>
+            <div>
+              <p className="text-xs text-slate-400">Correo</p>
+              {parcel.currentClient.email ? (
+                <a href={`mailto:${parcel.currentClient.email}`} className="font-medium text-brand-600 hover:underline">
+                  {parcel.currentClient.email}
+                </a>
+              ) : (
+                <p className="font-medium text-red-500">falta ⚠</p>
+              )}
+            </div>
+            <div>
+              <p className="text-xs text-slate-400">Vendedor</p>
+              <p className="font-medium text-slate-700">{parcel.vendedor ?? "—"}</p>
+            </div>
+          </div>
+        </Card>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Aplicar evento */}
@@ -476,18 +522,28 @@ export default async function ParcelPage({
                                 </Badge>
                               </td>
                               <td className="px-3 py-2">
-                                {c.proofUrl ? (
-                                  <a
-                                    href={c.proofUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-xs font-medium text-brand-600 hover:underline"
-                                  >
-                                    📎 Ver
-                                  </a>
-                                ) : (
+                                <div className="flex flex-col gap-1">
+                                  {c.status === "pagada" && !c.proofUrl && (
+                                    <span className="w-fit rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700">
+                                      ⚠ falta comprobante
+                                    </span>
+                                  )}
+                                  {c.proofUrl && (
+                                    <a
+                                      href={c.proofUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-xs font-medium text-brand-600 hover:underline"
+                                    >
+                                      📎 Ver
+                                    </a>
+                                  )}
                                   <form
-                                    action={uploadInstallmentProof}
+                                    action={
+                                      c.status === "pagada"
+                                        ? replaceInstallmentProof
+                                        : uploadInstallmentProof
+                                    }
                                     className="flex items-center gap-1"
                                   >
                                     <input
@@ -506,25 +562,34 @@ export default async function ParcelPage({
                                       className="whitespace-nowrap text-xs font-medium text-slate-500 hover:text-brand-600 hover:underline"
                                       title={
                                         c.status === "pagada"
-                                          ? "Adjuntar comprobante"
-                                          : "Sube el comprobante y la cuota queda pagada"
+                                          ? c.proofUrl
+                                            ? "Reemplazar comprobante"
+                                            : "Adjuntar comprobante faltante"
+                                          : "Comprobante obligatorio: al subirlo la cuota queda pagada"
                                       }
                                     >
-                                      subir
+                                      {c.status === "pagada"
+                                        ? c.proofUrl
+                                          ? "reemplazar"
+                                          : "adjuntar"
+                                        : "pagar con comprobante"}
                                     </button>
                                   </form>
-                                )}
+                                </div>
                               </td>
                               <td className="px-3 py-2 text-right">
-                                {c.status !== "pagada" && (
-                                  <form action={markInstallmentPaid}>
+                                {c.status === "pagada" && (
+                                  <form action={unmarkInstallmentPaid}>
                                     <input
                                       type="hidden"
                                       name="installmentId"
                                       value={c.id}
                                     />
-                                    <button className="text-xs font-medium text-brand-600 hover:underline">
-                                      Marcar pagada
+                                    <button
+                                      className="text-xs font-medium text-red-500 hover:underline"
+                                      title="Corregir error: vuelve la cuota a pendiente y anula el comprobante de dinero (queda en el historial)"
+                                    >
+                                      desmarcar
                                     </button>
                                   </form>
                                 )}
@@ -538,6 +603,38 @@ export default async function ParcelPage({
                 </>
               );
             })()
+          )}
+        </div>
+      </Card>
+
+      {/* Historial de cambios de gestión (auditoría — reunión 20-07-2026) */}
+      <Card>
+        <CardHeader
+          title="Historial de cambios"
+          subtitle="Quién hizo qué y cuándo sobre las cuotas y comprobantes de esta parcela."
+        />
+        <div className="p-5">
+          {parcel.audit.length === 0 ? (
+            <p className="text-sm text-slate-400">
+              Sin cambios registrados aún (la auditoría comenzó el 20-07-2026).
+            </p>
+          ) : (
+            <ul className="divide-y divide-slate-50 text-sm">
+              {parcel.audit.map((a) => (
+                <li key={a.id} className="flex items-start justify-between gap-3 py-2">
+                  <div>
+                    <p className="text-slate-700">{a.detail ?? a.action}</p>
+                    <p className="text-xs text-slate-400">
+                      {a.userName ?? "sistema"} ·{" "}
+                      {new Date(a.createdAt).toLocaleString("es-CL")}
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">
+                    {a.action.replace(/_/g, " ")}
+                  </span>
+                </li>
+              ))}
+            </ul>
           )}
         </div>
       </Card>

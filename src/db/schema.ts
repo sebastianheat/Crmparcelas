@@ -1019,6 +1019,34 @@ export const projectUpdates = pgTable(
 );
 
 
+
+// ─── Auditoría de cambios (reunión 20-07-2026: trazabilidad de gestión) ───────
+// Registra quién hizo qué y cuándo sobre cuotas, comprobantes y fichas.
+
+export const auditLog = pgTable(
+  "audit_log",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+    userName: text("user_name"),
+    action: text("action").notNull(), // pagar_cuota | desmarcar_cuota | subir_comprobante | reemplazar_comprobante | ...
+    entity: text("entity").notNull(), // installment | parcel | client | ...
+    entityId: uuid("entity_id"),
+    parcelId: uuid("parcel_id").references(() => parcels.id, { onDelete: "cascade" }),
+    detail: text("detail"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    index("audit_log_tenant_idx").on(t.tenantId),
+    index("audit_log_parcel_idx").on(t.parcelId),
+  ],
+);
+
 // ─── Documentos tributarios (SII) por empresa ─────────────────────────────────
 // F29, certificados, RCV (registro de compras/ventas), F22, informes. La meta
 // guarda lo parseado (folios, montos por período) para la sección Contabilidad.
@@ -1256,6 +1284,7 @@ export type BankMovement = typeof bankMovements.$inferSelect;
 export type PaymentIntent = typeof paymentIntents.$inferSelect;
 export type ProjectUpdate = typeof projectUpdates.$inferSelect;
 export type TaxDocument = typeof taxDocuments.$inferSelect;
+export type AuditLog = typeof auditLog.$inferSelect;
 export type ClientDocument = typeof clientDocuments.$inferSelect;
 export type Lead = typeof leads.$inferSelect;
 export type LeadActivity = typeof leadActivities.$inferSelect;
@@ -1289,6 +1318,7 @@ export const TENANT_SCOPED_TABLES = [
   "payment_intents",
   "project_updates",
   "tax_documents",
+  "audit_log",
 ] as const;
 
 export { sql };
